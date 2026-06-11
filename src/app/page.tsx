@@ -1,21 +1,235 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   PlusCircle, Trash2, FlaskConical, Loader2, 
-  ClipboardList, AlertTriangle, ArrowRight, Sparkles 
+  ClipboardList, AlertTriangle, ArrowRight, Sparkles, Pencil, X, ChevronDown 
 } from "lucide-react";
 
+const FREQUENCY_PRESETS = [
+  "OD (Once Daily)",
+  "BD (Twice Daily)",
+  "TDS (Three times Daily)",
+  "QID (Four times Daily)",
+  "SOS (As Needed)",
+  "Custom..."
+];
+
+type Medication = {
+  id: number;
+  name: string;
+  dosage: string;
+  frequency: string;
+};
+
+function FrequencyDropdown({ 
+  value, 
+  onChange 
+}: { 
+  value: string; 
+  onChange: (val: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownStyle, setDropdownStyle] = useState({ top: 0, left: 0, width: 0, maxHeight: 280 });
+
+  const updateDropdownPosition = () => {
+    if (!containerRef.current) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const viewportPadding = 16;
+    const menuGap = 4;
+    const preferredHeight = Math.min(280, FREQUENCY_PRESETS.length * 48 + 8);
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding - menuGap;
+    const spaceAbove = rect.top - viewportPadding - menuGap;
+    const shouldOpenAbove = spaceBelow < preferredHeight && spaceAbove > spaceBelow;
+    const availableHeight = Math.max(140, shouldOpenAbove ? spaceAbove : spaceBelow);
+    const maxHeight = Math.min(preferredHeight, availableHeight);
+
+    setDropdownStyle({
+      top: shouldOpenAbove ? rect.top - menuGap - maxHeight : rect.bottom + menuGap,
+      left: Math.min(Math.max(rect.left, viewportPadding), window.innerWidth - rect.width - viewportPadding),
+      width: rect.width,
+      maxHeight,
+    });
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (containerRef.current && !containerRef.current.contains(target)) {
+        if (dropdownRef.current && dropdownRef.current.contains(target)) return;
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      updateDropdownPosition();
+      document.addEventListener("mousedown", handleClickOutside);
+      window.addEventListener("resize", updateDropdownPosition);
+      window.addEventListener("scroll", updateDropdownPosition, true);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", updateDropdownPosition);
+      window.removeEventListener("scroll", updateDropdownPosition, true);
+    };
+  }, [isOpen]);
+
+  const toggleDropdown = () => {
+    if (!isOpen) updateDropdownPosition();
+    setIsOpen(!isOpen);
+  };
+
+  const dropdownPortal = typeof document !== "undefined" ? createPortal(
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          ref={dropdownRef}
+          data-lenis-prevent
+          initial={{ opacity: 0, y: -5, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -5, scale: 0.95 }}
+          transition={{ duration: 0.15 }}
+          style={{ 
+            position: 'fixed', 
+            top: `${dropdownStyle.top}px`, 
+            left: `${dropdownStyle.left}px`, 
+            width: `${dropdownStyle.width}px`, 
+            maxHeight: `${dropdownStyle.maxHeight}px`,
+            zIndex: 99999 
+          }}
+          className="frequency-dropdown-menu bg-surface border border-outline-variant rounded-xl shadow-xl overflow-y-auto py-1"
+        >
+          {FREQUENCY_PRESETS.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                onChange(option);
+                setIsOpen(false);
+              }}
+              className={`w-full text-left px-4 py-3 hover:bg-surface-container text-body-md transition-colors ${
+                value === option ? "bg-primary-container/30 text-primary font-bold" : "text-on-surface"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  ) : null;
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <button
+        type="button"
+        onClick={toggleDropdown}
+        className="w-full bg-surface-container-lowest border border-outline text-left text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary flex justify-between items-center"
+      >
+        <span>{value}</span>
+        <ChevronDown size={18} className={`text-on-surface-variant transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+      {dropdownPortal}
+    </div>
+  );
+}
+
 export default function PrescriptionEntryPage() {
-  const [drugs, setDrugs] = useState([
-    { id: 1, name: "Warfarin", dosage: "5mg - Once Daily" },
-    { id: 2, name: "Aspirin", dosage: "81mg - Once Daily" },
+  const [drugs, setDrugs] = useState<Medication[]>([
+    { id: 1, name: "Warfarin", dosage: "5mg", frequency: "OD (Once Daily)" },
+    { id: 2, name: "Aspirin", dosage: "81mg", frequency: "OD (Once Daily)" },
   ]);
 
-  const addRow = () => {
-    setDrugs([...drugs, { id: Date.now(), name: "", dosage: "" }]);
+  // Modal State
+  type DraftDrug = { 
+    id: string | number; 
+    name: string; 
+    dosage: string; 
+    frequencyType: string; 
+    customFrequency: string; 
+  };
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [draftDrugs, setDraftDrugs] = useState<DraftDrug[]>([]);
+
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.classList.add('modal-open');
+      document.documentElement.classList.add('modal-open');
+    } else {
+      document.body.classList.remove('modal-open');
+      document.documentElement.classList.remove('modal-open');
+    }
+    return () => { 
+      document.body.classList.remove('modal-open');
+      document.documentElement.classList.remove('modal-open');
+    };
+  }, [isModalOpen]);
+
+  const openAddModal = () => {
+    setModalMode("add");
+    setDraftDrugs([{ id: Date.now(), name: "", dosage: "", frequencyType: "OD (Once Daily)", customFrequency: "" }]);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (drug: Medication) => {
+    setModalMode("edit");
+    const isPreset = FREQUENCY_PRESETS.includes(drug.frequency);
+    setDraftDrugs([{ 
+      id: drug.id, 
+      name: drug.name, 
+      dosage: drug.dosage, 
+      frequencyType: isPreset ? drug.frequency : "Custom...", 
+      customFrequency: isPreset ? "" : drug.frequency 
+    }]);
+    setIsModalOpen(true);
+  };
+
+  const updateDraftDrug = (id: string | number, field: keyof DraftDrug, value: string) => {
+    setDraftDrugs(draftDrugs.map(d => d.id === id ? { ...d, [field]: value } : d));
+  };
+
+  const addDraftRow = () => {
+    setDraftDrugs([...draftDrugs, { id: Date.now() + Math.random(), name: "", dosage: "", frequencyType: "OD (Once Daily)", customFrequency: "" }]);
+  };
+
+  const removeDraftRow = (id: string | number) => {
+    if (draftDrugs.length > 1) {
+      setDraftDrugs(draftDrugs.filter(d => d.id !== id));
+    }
+  };
+
+  const saveMedication = () => {
+    const validDrafts = draftDrugs.filter(d => d.name.trim() !== "");
+    if (validDrafts.length === 0) return;
+    
+    if (modalMode === "add") {
+      setDrugs([
+        ...drugs, 
+        ...validDrafts.map((d, i) => ({ 
+          id: Date.now() + i, 
+          name: d.name, 
+          dosage: d.dosage, 
+          frequency: d.frequencyType === "Custom..." ? d.customFrequency : d.frequencyType 
+        }))
+      ]);
+    } else if (modalMode === "edit") {
+      const draft = validDrafts[0];
+      setDrugs(drugs.map(d => d.id === draft.id ? { 
+        ...d, 
+        name: draft.name, 
+        dosage: draft.dosage, 
+        frequency: draft.frequencyType === "Custom..." ? draft.customFrequency : draft.frequencyType 
+      } : d));
+    }
+    setIsModalOpen(false);
   };
 
   const removeRow = (id: number) => {
@@ -35,7 +249,7 @@ export default function PrescriptionEntryPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -95,10 +309,10 @@ export default function PrescriptionEntryPage() {
             <h2 className="font-headline-md text-headline-md text-on-surface">Drug List</h2>
             <button
               className="flex items-center gap-2 text-primary font-bold hover:bg-primary-fixed p-2 rounded transition-colors"
-              onClick={addRow}
+              onClick={openAddModal}
             >
               <PlusCircle size={20} />
-              <span className="text-body-sm font-body-sm">Add Medication</span>
+              <span className="text-body-sm font-body-sm">Add Medications</span>
             </button>
           </div>
           <div className="p-0 overflow-x-auto">
@@ -109,9 +323,12 @@ export default function PrescriptionEntryPage() {
                     Drug Name
                   </th>
                   <th className="px-6 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">
-                    Dosage / Frequency
+                    Dosage
                   </th>
-                  <th className="px-6 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider w-16 text-center">
+                  <th className="px-6 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">
+                    Frequency
+                  </th>
+                  <th className="px-6 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider w-24 text-center">
                     Action
                   </th>
                 </tr>
@@ -127,40 +344,31 @@ export default function PrescriptionEntryPage() {
                       className="border-b border-outline-variant hover:bg-surface-container transition-colors"
                     >
                       <td className="px-6 py-4">
-                        <input
-                          className="w-full bg-transparent border-none p-0 focus:ring-0 text-on-surface font-semibold"
-                          type="text"
-                          defaultValue={drug.name}
-                          onChange={(e) => {
-                            const newDrugs = [...drugs];
-                            const idx = newDrugs.findIndex(d => d.id === drug.id);
-                            if(idx > -1) newDrugs[idx].name = e.target.value;
-                            setDrugs(newDrugs);
-                          }}
-                          placeholder="Enter drug name..."
-                        />
+                        <span className="text-on-surface font-semibold">{drug.name || "Unnamed Medication"}</span>
                       </td>
                       <td className="px-6 py-4">
-                        <input
-                          className="w-full bg-transparent border-none p-0 focus:ring-0 text-on-surface"
-                          type="text"
-                          defaultValue={drug.dosage}
-                          onChange={(e) => {
-                            const newDrugs = [...drugs];
-                            const idx = newDrugs.findIndex(d => d.id === drug.id);
-                            if(idx > -1) newDrugs[idx].dosage = e.target.value;
-                            setDrugs(newDrugs);
-                          }}
-                          placeholder="e.g. 10mg BD"
-                        />
+                        <span className="text-on-surface">{drug.dosage || "-"}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-on-surface">{drug.frequency || "-"}</span>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => removeRow(drug.id)}
-                          className="text-on-surface-variant hover:text-error transition-colors"
-                        >
-                          <Trash2 size={20} />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => openEditModal(drug)}
+                            className="text-on-surface-variant hover:text-primary transition-colors p-1"
+                            title="Edit"
+                          >
+                            <Pencil size={18} />
+                          </button>
+                          <button
+                            onClick={() => removeRow(drug.id)}
+                            className="text-on-surface-variant hover:text-error transition-colors p-1"
+                            title="Delete"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </td>
                     </motion.tr>
                   ))}
@@ -297,10 +505,10 @@ export default function PrescriptionEntryPage() {
                     <section>
                       <h4 className="font-label-caps text-label-caps text-on-surface-variant mb-3 uppercase tracking-widest border-b border-outline-variant pb-1">
                         AI Recommendation
-                      </h4>
-                      <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
-                        <p className="text-body-sm text-on-surface italic font-medium">
-                          "{analyzeMutation.data.recommendation}"
+                        </h4>
+                        <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
+                          <p className="text-body-sm text-on-surface italic font-medium">
+                          &quot;{analyzeMutation.data.recommendation}&quot;
                         </p>
                       </div>
                     </section>
@@ -323,6 +531,129 @@ export default function PrescriptionEntryPage() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Add / Edit Medication Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-surface border border-outline-variant shadow-2xl rounded-xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
+            >
+              {/* Sticky Header */}
+              <div className="p-6 border-b border-outline-variant bg-surface-container-low flex justify-between items-center shrink-0 z-10">
+                <h2 className="font-headline-md text-headline-md text-on-surface font-bold">
+                  {modalMode === "add" ? "Add Medications" : "Edit Medication"}
+                </h2>
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-on-surface-variant hover:bg-surface-container-high p-1 rounded-full transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              
+              {/* Scrollable Body */}
+              <div data-lenis-prevent className="modal-scroll-area p-6 space-y-6 overflow-y-auto">
+                <AnimatePresence initial={false}>
+                  {draftDrugs.map((draft, index) => (
+                    <motion.div 
+                      key={draft.id}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="flex gap-4 items-start relative"
+                      style={{ zIndex: 50 - index }}
+                    >
+                      <div className="flex-[2] space-y-1">
+                        {index === 0 && <label className="text-on-surface-variant font-label-caps text-label-caps block">Drug Name</label>}
+                        <input
+                          className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
+                          placeholder="e.g. Lisinopril"
+                          type="text"
+                          value={draft.name}
+                          onChange={(e) => updateDraftDrug(draft.id, "name", e.target.value)}
+                          autoFocus={index === 0}
+                        />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        {index === 0 && <label className="text-on-surface-variant font-label-caps text-label-caps block">Dosage</label>}
+                        <input
+                          className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
+                          placeholder="e.g. 10mg"
+                          type="text"
+                          value={draft.dosage}
+                          onChange={(e) => updateDraftDrug(draft.id, "dosage", e.target.value)}
+                        />
+                      </div>
+                      <div className="flex-[1.5] space-y-1">
+                        {index === 0 && <label className="text-on-surface-variant font-label-caps text-label-caps block">Frequency</label>}
+                        
+                        <FrequencyDropdown 
+                          value={draft.frequencyType} 
+                          onChange={(val) => updateDraftDrug(draft.id, "frequencyType", val)} 
+                        />
+                        
+                        {draft.frequencyType === "Custom..." && (
+                          <motion.input
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="w-full mt-2 bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary relative z-0"
+                            placeholder="e.g. 2 times every 3 days"
+                            type="text"
+                            value={draft.customFrequency}
+                            onChange={(e) => updateDraftDrug(draft.id, "customFrequency", e.target.value)}
+                          />
+                        )}
+                      </div>
+                      {modalMode === "add" && draftDrugs.length > 1 && (
+                        <div className={`flex items-center justify-center shrink-0 ${index === 0 ? "pt-7" : ""}`}>
+                          <button
+                            onClick={() => removeDraftRow(draft.id)}
+                            className="text-on-surface-variant hover:text-error transition-colors p-2 rounded hover:bg-surface-container"
+                            title="Remove"
+                          >
+                            <Trash2 size={20} />
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+
+                {modalMode === "add" && (
+                  <button
+                    onClick={addDraftRow}
+                    className="flex items-center justify-center gap-2 text-primary font-bold hover:bg-primary-container p-3 rounded-lg transition-colors w-full border border-dashed border-primary mt-2"
+                  >
+                    <PlusCircle size={20} />
+                    <span className="text-body-sm font-body-sm">Add Another Medication</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Sticky Footer */}
+              <div className="p-4 bg-surface-container-highest border-t border-outline-variant flex justify-end gap-3 shrink-0 z-10">
+                <button 
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 font-bold text-on-surface-variant hover:bg-surface-container-high rounded transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={saveMedication}
+                  disabled={!draftDrugs.some(d => d.name.trim() !== "")}
+                  className="px-4 py-2 bg-primary text-on-primary font-bold rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {modalMode === "add" ? "Add to List" : "Save Changes"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

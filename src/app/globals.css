@@ -45,3 +45,16 @@
   0%, 100% { opacity: 1; }
   50% { opacity: .5; }
 }
+
+html.modal-open,
+body.modal-open,
+body.modal-open main {
+  overflow: hidden !important;
+}
+
+.modal-scroll-area,
+.frequency-dropdown-menu {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}

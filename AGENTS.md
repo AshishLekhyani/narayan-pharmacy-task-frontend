@@ -45,7 +45,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Tech Stack Compliance**: Strictly adhere to Next.js 15+ App Router conventions. Use `@tanstack/react-query` for ALL async data interactions. 
 - **Styling constraints**: Always use Tailwind v4 (`@theme`) combined with CSS `clamp()` for responsive text. Never use legacy Material Icons; rely strictly on `lucide-react`.
 - **Motion & UI UX**: Leverage `framer-motion` for all state changes. Native CSS transitions are discouraged for layout shifts. Do not break the `lenis` momentum scrolling wrapper in the root layout.
-- **Client-Facing Communication**: This is a client-facing application used by patients and everyday customers of Narayan Pharmacy. Do NOT use overly complex medical jargon without explanation. Ensure that interaction warnings, UI text, and feedback are digestible, empathetic, and accessible to a non-medical audience.
+- **Clinical Accuracy**: Always assume the end-user is a licensed pharmacist. Do not dumb down medical terminology. Ensure data density and typography (`data-mono`) are optimized for rapid, high-stakes scanning.
 
 ---
 

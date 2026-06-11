@@ -20,7 +20,7 @@
 
 ### [June 10, 2026] Course Corrections: Styling & Audience Realignment
 - **Styling Conflict**: Injected the legacy `tailwind.config.ts` directly into the Next.js Tailwind v4 setup using the `@config` directive to resolve mapping failures from the Stitch prototypes.
-- **Audience Shift**: Instructed the AI to immediately pivot the UI tone from "licensed pharmacists only" to "client-facing" for everyday patients of Narayan Pharmacy, stripping out confusing medical jargon.
+- **Clinical Audience Re-Pivot**: After a brief "client-facing" shift, the project was decisively reverted back to a **Pharmacist-Only** clinical interface to ensure medical terminology remains dense and accurate.
 
 ## Phase 2: Refinement & Simplification
 
@@ -32,6 +32,18 @@
 - **Action**: Removed the redundant lateral navigation (sidebar) and unnecessary account/settings header icons. Reclaimed horizontal space by removing the `md:ml-64` margin.
 - **Rebranding**: Officially updated the HTML title and navigation headers strictly to "Narayan Pharmacy".
 - **Bug Fix**: Added `"type": "module"` to `package.json` to eliminate Node.js ECMA parsing warnings caused by Tailwind v4.
+
+### [June 11, 2026] Modal Workflow & Active Navigation States
+- **Feature Implementation**: Built a robust `framer-motion` modal overlay for Adding and Editing medications. This replaced the clunky inline table inputs, providing a much cleaner, professional data-entry pattern.
+- **Iteration (Batching)**: Enhanced the modal's internal state to support batch-adding. Pharmacists can now click "Add Another Medication" within the modal to append multiple rows of data in a single rapid-entry flow.
+- **Iteration (Data Structuring)**: Separated the combined "Dosage / Frequency" string into explicit `dosage` and `frequency` variables. Updated both the table columns and modal inputs to reflect this higher-fidelity data structure.
+- **Iteration (Guided Input)**: Replaced the free-text Frequency input with a native HTML Dropdown (OD, BD, TDS, etc.). Included a "Custom..." fallback option that smoothly animates a guided text input into view when selected. Utilizing native select eliminates edge-case scroll-chaining and stacking-context/clipping bugs inside the modal.
+- **Scroll Lock**: Enforced global CSS scroll-locking on the `html` and `body` tags when the modal is open to prevent underlying Next.js layouts from scroll-bleeding.
+- **Navigation Fix**: Extracted the header navigation into a `<Navigation />` Client Component using `usePathname()` to dynamically highlight the currently active page route, fixing the active state visual bug.
+
+### [June 11, 2026] Navigation Context Refinement
+- **Action**: Removed the global search bar from the top navigation as it did not make contextual sense for a single-prescription entry flow.
+- **Clarity**: Renamed generic navigation terms ("Dashboard" and "Patients") to precise, intent-driven labels ("Prescription Entry" and "Prescription History").
 
 ---
 
