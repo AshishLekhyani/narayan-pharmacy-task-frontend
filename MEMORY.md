@@ -60,3 +60,10 @@
 - **API Proxy**: Implemented Next.js `rewrites` in `next.config.ts` to cleanly proxy all frontend `/api/*` calls to the standalone Express backend on port 5000, avoiding complex CORS configurations.
 - **Data Hydration**: Refactored `history/page.tsx` from static mock data to live PostgreSQL data utilizing `@tanstack/react-query`, correctly mapping the flattened Prisma response columns back to the rich UI nested data architecture.
 
+### [June 11, 2026 - 8:13 PM] Form Persistence, UX Hardening & Clinical Safety Guardrails
+- **Session Persistence**: Replaced raw `useState` for `patientName`, `date`, and `drugs` with `sessionStorage`-backed lazy initializers. State survives tab switches and navigation within the same browser session but is automatically cleared when the tab is closed. All three keys (`rx_patientName`, `rx_date`, `rx_drugs`) are cleared on successful save.
+- **History Auto-Refetch**: Wired `useQueryClient` into the save mutation's `onSuccess` callback. Calling `queryClient.invalidateQueries({ queryKey: ["history"] })` causes the History page cache to be marked stale immediately after a prescription is saved, so no manual navigation is needed to see the new record.
+- **Single-Drug Analysis Guard**: Changed the `disabled` condition on the Analyze button from `drugs.length === 0` to `drugs.length < 2`. Drug interaction analysis requires at least two concurrent medications; a single drug has no pair to interact with. A helper label appears below the button explaining the minimum requirement.
+- **Inline Error UI**: The analyze result placeholder panel now shows a distinct error state (red AlertTriangle icon + the server's actual error message) when the mutation fails. Previously the error was only logged to the console.
+- **Real Error Messages**: The `analyzeMutation.mutationFn` now parses the JSON error body returned by the backend and surfaces its `message` field, replacing the generic `"Failed to analyze"` fallback.
+

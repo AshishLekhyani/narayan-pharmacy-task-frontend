@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   PlusCircle, Trash2, FlaskConical, Loader2, 
@@ -152,12 +152,28 @@ function FrequencyDropdown({
 }
 
 export default function PrescriptionEntryPage() {
-  const [patientName, setPatientName] = useState("");
-  const [date, setDate] = useState("");
-  const [drugs, setDrugs] = useState<Medication[]>([
-    { id: 1, name: "Warfarin", dosage: "5mg", frequency: "OD (Once Daily)" },
-    { id: 2, name: "Aspirin", dosage: "81mg", frequency: "OD (Once Daily)" },
-  ]);
+  const queryClient = useQueryClient();
+
+  // --- Persistent state backed by sessionStorage (survives tab switches, clears on close) ---
+  const [patientName, setPatientName] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("rx_patientName") ?? "";
+  });
+
+  const [date, setDate] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return sessionStorage.getItem("rx_date") ?? todayIsoDate();
+  });
+
+  const [drugs, setDrugs] = useState<Medication[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = sessionStorage.getItem("rx_drugs");
+      return stored ? (JSON.parse(stored) as Medication[]) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Modal State
   type DraftDrug = { 
@@ -173,13 +189,19 @@ export default function PrescriptionEntryPage() {
 
   const replaceDrugs = (nextDrugs: Medication[]) => {
     setDrugs(nextDrugs);
+    sessionStorage.setItem("rx_drugs", JSON.stringify(nextDrugs));
     if (analyzeMutation.isSuccess) {
       analyzeMutation.reset();
     }
   };
 
+  // Sync patientName & date to sessionStorage whenever they change
+  useEffect(() => { sessionStorage.setItem("rx_patientName", patientName); }, [patientName]);
+  useEffect(() => { sessionStorage.setItem("rx_date", date); }, [date]);
+
+  // Ensure date is always initialised to today on first mount if storage was empty
   useEffect(() => {
-    setDate(todayIsoDate());
+    if (!date) setDate(todayIsoDate());
   }, []);
 
   useEffect(() => {
@@ -271,8 +293,20 @@ export default function PrescriptionEntryPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ medications: currentDrugs }),
       });
-      if (!response.ok) throw new Error("Failed to analyze");
+      if (!response.ok) {
+        // Surface the server's own error message instead of a generic string
+        let msg = "Failed to analyze";
+        try {
+          const errBody = await response.json();
+          if (errBody?.message) msg = errBody.message;
+        } catch {}
+        throw new Error(msg);
+      }
       return response.json();
+    },
+    onError: (error: Error) => {
+      // Displayed inline — no alert needed, mutation.error drives the UI
+      console.error("[Analyze Error]:", error.message);
     },
   });
 
@@ -302,10 +336,16 @@ export default function PrescriptionEntryPage() {
     },
     onSuccess: () => {
       alert("Prescription saved successfully!");
+      // Clear the persistent draft
+      sessionStorage.removeItem("rx_patientName");
+      sessionStorage.removeItem("rx_date");
+      sessionStorage.removeItem("rx_drugs");
       setPatientName("");
       setDate(todayIsoDate());
       replaceDrugs([]);
       analyzeMutation.reset();
+      // Trigger history page to refetch immediately
+      queryClient.invalidateQueries({ queryKey: ["history"] });
     },
     onError: (error: Error) => {
       alert(error.message);
@@ -452,8 +492,8 @@ export default function PrescriptionEntryPage() {
           className="flex flex-col items-center py-6"
         >
           <button
-            className="group relative bg-primary text-on-primary px-8 py-4 rounded-full font-bold flex items-center gap-3 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-80 disabled:hover:scale-100"
-            disabled={analyzeMutation.isPending || drugs.length === 0}
+            className="group relative bg-primary text-on-primary px-8 py-4 rounded-full font-bold flex items-center gap-3 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed"
+            disabled={analyzeMutation.isPending || drugs.length < 2}
             onClick={() => analyzeMutation.mutate(drugs)}
           >
             {analyzeMutation.isPending ? (
@@ -468,6 +508,11 @@ export default function PrescriptionEntryPage() {
               </>
             )}
           </button>
+          {drugs.length < 2 && !analyzeMutation.isPending && (
+            <p className="mt-3 text-body-sm text-on-surface-variant">
+              Add at least 2 medications to run an interaction analysis.
+            </p>
+          )}
         </motion.div>
 
         {/* Analysis Result Area */}
@@ -482,7 +527,13 @@ export default function PrescriptionEntryPage() {
                 analyzeMutation.isPending ? "interaction-loading" : ""
               }`}
             >
-              {analyzeMutation.isPending ? (
+              {analyzeMutation.isError ? (
+                <div className="flex flex-col items-center">
+                  <AlertTriangle className="text-error mb-4" size={48} />
+                  <p className="font-headline-sm text-error mb-1">Analysis Failed</p>
+                  <p className="text-body-sm text-on-surface-variant max-w-md">{analyzeMutation.error?.message}</p>
+                </div>
+              ) : analyzeMutation.isPending ? (
                 <div className="flex flex-col items-center">
                   <Loader2 className="animate-spin text-primary mb-4" size={48} />
                   <p className="font-display-lg text-headline-md text-primary">Scanning clinical databases...</p>
