@@ -22,7 +22,7 @@ export default function HistoryPage() {
       id: 1,
       name: "Robert J. Henderson",
       date: "2023-11-28 09:42",
-      drugCount: "04",
+      drugCount: "02",
       status: "Critical Conflict",
       statusIcon: AlertTriangle,
       statusColor: "text-on-error-container",
@@ -31,14 +31,15 @@ export default function HistoryPage() {
       severityColor: "text-red-700 bg-red-100 border-red-200",
       severityDot: "bg-red-600",
       borderLeft: "border-error",
+      drugs: [
+        { name: "Warfarin", dosage: "5mg", frequency: "OD (Once Daily)" },
+        { name: "Fluconazole", dosage: "200mg", frequency: "OD (Once Daily)" }
+      ],
       detail: {
         title: "Medication Conflict Detail",
         subtitle: "Warfarin + Fluconazole",
         desc: "Inhibition of CYP2C9 metabolic pathway increasing bleeding risk by 2.4x. Immediate clinical intervention required.",
         action: "Switch antifungal to Terbinafine or monitor INR daily.",
-        physician: "Dr. Sarah Danvers",
-        dept: "Cardiology - Wing C",
-        initials: "DS",
       },
     },
     {
@@ -54,6 +55,10 @@ export default function HistoryPage() {
       severityColor: "text-orange-700 bg-orange-100 border-orange-200",
       severityDot: "bg-orange-500",
       borderLeft: "border-tertiary-container",
+      drugs: [
+        { name: "Lisinopril", dosage: "10mg", frequency: "OD (Once Daily)" },
+        { name: "Spironolactone", dosage: "25mg", frequency: "OD (Once Daily)" }
+      ],
       detail: {
         title: "Observation",
         desc: "Patient prescribed Lisinopril alongside Spironolactone. Moderate risk of hyperkalemia. AI recommends checking potassium levels within 72 hours.",
@@ -63,7 +68,7 @@ export default function HistoryPage() {
       id: 3,
       name: "Samir Al-Fayed",
       date: "2023-11-28 07:30",
-      drugCount: "06",
+      drugCount: "03",
       status: "Low Risk",
       statusIcon: CheckCircle,
       statusColor: "text-on-secondary-container",
@@ -72,6 +77,11 @@ export default function HistoryPage() {
       severityColor: "text-yellow-700 bg-yellow-100 border-yellow-200",
       severityDot: "bg-yellow-500",
       borderLeft: "border-yellow-400",
+      drugs: [
+        { name: "Cetirizine", dosage: "10mg", frequency: "OD (Once Daily)" },
+        { name: "Diphenhydramine", dosage: "25mg", frequency: "SOS (As Needed)" },
+        { name: "Metformin", dosage: "500mg", frequency: "BD (Twice Daily)" }
+      ],
       detail: {
         title: "Guidance",
         desc: "Slight risk of drowsiness when combining antihistamines. Advise patient to take at night.",
@@ -90,6 +100,9 @@ export default function HistoryPage() {
       severityColor: "text-on-surface-variant bg-surface-container-highest border-outline-variant",
       severityDot: "bg-on-surface-variant",
       borderLeft: "border-outline",
+      drugs: [
+        { name: "Atorvastatin", dosage: "20mg", frequency: "OD (Once Daily)" }
+      ],
       detail: null,
     },
   ];
@@ -253,22 +266,33 @@ export default function HistoryPage() {
                                   </div>
                                 </div>
 
-                                {record.detail.physician && (
+                                {record.drugs && (
                                   <div>
                                     <h4 className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-4">
-                                      Prescribing Physician
+                                      Prescription Details
                                     </h4>
-                                    <div className="flex items-center gap-4 mb-6 p-4 border border-outline-variant rounded-lg bg-surface">
-                                      <div className="w-12 h-12 rounded-full bg-secondary-container flex items-center justify-center text-on-secondary-container font-bold text-lg">
-                                        {record.detail.initials}
-                                      </div>
-                                      <div>
-                                        <p className="font-bold text-body-sm">{record.detail.physician}</p>
-                                        <p className="text-body-sm text-on-surface-variant">{record.detail.dept}</p>
-                                      </div>
+                                    <div className="bg-surface border border-outline-variant rounded-lg overflow-hidden shadow-sm">
+                                      <table className="w-full text-left border-collapse">
+                                        <thead className="bg-surface-container-low border-b border-outline-variant">
+                                          <tr>
+                                            <th className="px-4 py-3 font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Drug</th>
+                                            <th className="px-4 py-3 font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Dosage</th>
+                                            <th className="px-4 py-3 font-label-caps text-xs text-on-surface-variant uppercase tracking-wider">Frequency</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-outline-variant">
+                                          {record.drugs.map((d, i) => (
+                                            <tr key={i} className="hover:bg-surface-container-low transition-colors">
+                                              <td className="px-4 py-3 font-semibold text-body-sm text-on-surface">{d.name}</td>
+                                              <td className="px-4 py-3 text-body-sm text-on-surface-variant">{d.dosage}</td>
+                                              <td className="px-4 py-3 text-body-sm text-on-surface-variant">{d.frequency}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
                                     </div>
-                                    <button className="w-full lg:w-auto bg-primary text-on-primary px-6 py-3 rounded-lg font-bold text-sm hover:bg-primary/90 transition-colors">
-                                      Review & Validate Prescription
+                                    <button className="w-full mt-6 lg:w-auto bg-primary text-on-primary px-6 py-3 rounded-lg font-bold text-sm hover:bg-primary/90 transition-colors shadow-sm active:scale-[0.98]">
+                                      Review AI Audit Log
                                     </button>
                                   </div>
                                 )}
