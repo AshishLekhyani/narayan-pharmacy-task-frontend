@@ -1,12 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Link from "next/link";
 import Providers from "./Providers";
 import Navigation from "../components/Navigation";
-import { 
-  Search, Filter, Bell, CircleHelp, Settings, 
-  Activity, Pill, History, Plus, LogOut 
-} from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Narayan Pharmacy",

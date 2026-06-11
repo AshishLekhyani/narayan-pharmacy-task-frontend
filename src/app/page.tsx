@@ -8,6 +8,7 @@ import {
   PlusCircle, Trash2, FlaskConical, Loader2, 
   ClipboardList, AlertTriangle, ArrowRight, Sparkles, Pencil, X, ChevronDown 
 } from "lucide-react";
+import { todayIsoDate } from "../lib/format-date";
 
 const FREQUENCY_PRESETS = [
   "OD (Once Daily)",
@@ -23,6 +24,15 @@ type Medication = {
   name: string;
   dosage: string;
   frequency: string;
+};
+
+type AnalysisResult = {
+  severity: string;
+  severityLevel: string;
+  primaryWarning: string;
+  recommendation: string;
+  clinicalImpact: string[];
+  processedBy: string;
 };
 
 function FrequencyDropdown({ 
@@ -142,6 +152,8 @@ function FrequencyDropdown({
 }
 
 export default function PrescriptionEntryPage() {
+  const [patientName, setPatientName] = useState("");
+  const [date, setDate] = useState("");
   const [drugs, setDrugs] = useState<Medication[]>([
     { id: 1, name: "Warfarin", dosage: "5mg", frequency: "OD (Once Daily)" },
     { id: 2, name: "Aspirin", dosage: "81mg", frequency: "OD (Once Daily)" },
@@ -158,6 +170,17 @@ export default function PrescriptionEntryPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [draftDrugs, setDraftDrugs] = useState<DraftDrug[]>([]);
+
+  const replaceDrugs = (nextDrugs: Medication[]) => {
+    setDrugs(nextDrugs);
+    if (analyzeMutation.isSuccess) {
+      analyzeMutation.reset();
+    }
+  };
+
+  useEffect(() => {
+    setDate(todayIsoDate());
+  }, []);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -207,45 +230,86 @@ export default function PrescriptionEntryPage() {
   };
 
   const saveMedication = () => {
-    const validDrafts = draftDrugs.filter(d => d.name.trim() !== "");
+    const validDrafts = draftDrugs.filter(
+      (d) =>
+        d.name.trim() !== "" &&
+        d.dosage.trim() !== "" &&
+        (d.frequencyType === "Custom..." ? d.customFrequency.trim() !== "" : true)
+    );
     if (validDrafts.length === 0) return;
     
     if (modalMode === "add") {
-      setDrugs([
-        ...drugs, 
-        ...validDrafts.map((d, i) => ({ 
-          id: Date.now() + i, 
-          name: d.name, 
-          dosage: d.dosage, 
-          frequency: d.frequencyType === "Custom..." ? d.customFrequency : d.frequencyType 
-        }))
+      replaceDrugs([
+        ...drugs,
+        ...validDrafts.map((d, i) => ({
+          id: Date.now() + i,
+          name: d.name.trim(),
+          dosage: d.dosage.trim(),
+          frequency: d.frequencyType === "Custom..." ? d.customFrequency.trim() : d.frequencyType,
+        })),
       ]);
     } else if (modalMode === "edit") {
       const draft = validDrafts[0];
-      setDrugs(drugs.map(d => d.id === draft.id ? { 
-        ...d, 
-        name: draft.name, 
-        dosage: draft.dosage, 
-        frequency: draft.frequencyType === "Custom..." ? draft.customFrequency : draft.frequencyType 
+      replaceDrugs(drugs.map(d => d.id === draft.id ? {
+        ...d,
+        name: draft.name.trim(),
+        dosage: draft.dosage.trim(),
+        frequency: draft.frequencyType === "Custom..." ? draft.customFrequency.trim() : draft.frequencyType,
       } : d));
     }
     setIsModalOpen(false);
   };
 
   const removeRow = (id: number) => {
-    setDrugs(drugs.filter((d) => d.id !== id));
+    replaceDrugs(drugs.filter((d) => d.id !== id));
   };
 
-  const analyzeMutation = useMutation({
+  const analyzeMutation = useMutation<AnalysisResult, Error, Medication[]>({
     mutationFn: async (currentDrugs: typeof drugs) => {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ drugs: currentDrugs }),
+        body: JSON.stringify({ medications: currentDrugs }),
       });
       if (!response.ok) throw new Error("Failed to analyze");
       return response.json();
     },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!patientName.trim()) throw new Error("Patient Name is required.");
+      if (drugs.length === 0) throw new Error("At least one medication is required.");
+
+      const payload = {
+        patientName,
+        date,
+        medications: drugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency })),
+        aiAnalysis: analyzeMutation.data || null
+      };
+
+      const response = await fetch("/api/history", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Failed to save prescription.");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      alert("Prescription saved successfully!");
+      setPatientName("");
+      setDate(todayIsoDate());
+      replaceDrugs([]);
+      analyzeMutation.reset();
+    },
+    onError: (error: Error) => {
+      alert(error.message);
+    }
   });
 
   return (
@@ -268,23 +332,17 @@ export default function PrescriptionEntryPage() {
           className="bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden"
         >
           <div className="p-6 border-b border-outline-variant bg-surface-container-low">
-            <h2 className="font-headline-md text-headline-md text-on-surface">Patient & Provider Information</h2>
+            <h2 className="font-headline-md text-headline-md text-on-surface">Patient & Prescription Information</h2>
           </div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1">
               <label className="text-on-surface-variant font-label-caps text-label-caps block">Patient Name</label>
               <input
                 className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
                 placeholder="e.g. Johnathan Doe"
                 type="text"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-on-surface-variant font-label-caps text-label-caps block">Doctor Name</label>
-              <input
-                className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
-                placeholder="e.g. Dr. Sarah Chen"
-                type="text"
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
               />
             </div>
             <div className="space-y-1">
@@ -292,7 +350,8 @@ export default function PrescriptionEntryPage() {
               <input
                 className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
                 type="date"
-                defaultValue="2023-10-27"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
               />
             </div>
           </div>
@@ -373,6 +432,13 @@ export default function PrescriptionEntryPage() {
                     </motion.tr>
                   ))}
                 </AnimatePresence>
+                {drugs.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-10 text-center text-on-surface-variant">
+                      Add medications to begin the interaction analysis workflow.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -387,7 +453,7 @@ export default function PrescriptionEntryPage() {
         >
           <button
             className="group relative bg-primary text-on-primary px-8 py-4 rounded-full font-bold flex items-center gap-3 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-80 disabled:hover:scale-100"
-            disabled={analyzeMutation.isPending}
+            disabled={analyzeMutation.isPending || drugs.length === 0}
             onClick={() => analyzeMutation.mutate(drugs)}
           >
             {analyzeMutation.isPending ? (
@@ -521,8 +587,12 @@ export default function PrescriptionEntryPage() {
                   </div>
                   <div className="flex gap-4">
                     <button className="text-primary font-bold text-body-sm hover:underline">Print Report</button>
-                    <button className="bg-primary text-on-primary px-4 py-2 rounded font-bold text-body-sm hover:bg-primary/90 transition-colors">
-                      {analyzeMutation.data.severityLevel === "high" ? "Flag for Pharmacist Review" : "Approve Prescription"}
+                    <button 
+                      className="bg-primary text-on-primary px-4 py-2 rounded font-bold text-body-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
+                      onClick={() => saveMutation.mutate()}
+                      disabled={saveMutation.isPending}
+                    >
+                      {saveMutation.isPending ? "Saving..." : analyzeMutation.data.severityLevel === "high" ? "Flag & Save for Pharmacist Review" : "Approve & Save Prescription"}
                     </button>
                   </div>
                 </div>
@@ -644,7 +714,7 @@ export default function PrescriptionEntryPage() {
                 </button>
                 <button 
                   onClick={saveMedication}
-                  disabled={!draftDrugs.some(d => d.name.trim() !== "")}
+                  disabled={!draftDrugs.some(d => d.name.trim() !== "" && d.dosage.trim() !== "" && (d.frequencyType !== "Custom..." || d.customFrequency.trim() !== ""))}
                   className="px-4 py-2 bg-primary text-on-primary font-bold rounded hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {modalMode === "add" ? "Add to List" : "Save Changes"}

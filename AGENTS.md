@@ -46,6 +46,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Styling constraints**: Always use Tailwind v4 (`@theme`) combined with CSS `clamp()` for responsive text. Never use legacy Material Icons; rely strictly on `lucide-react`.
 - **Motion & UI UX**: Leverage `framer-motion` for all state changes. Native CSS transitions are discouraged for layout shifts. Do not break the `lenis` momentum scrolling wrapper in the root layout.
 - **Clinical Accuracy**: Always assume the end-user is a licensed pharmacist. Do not dumb down medical terminology. Ensure data density and typography (`data-mono`) are optimized for rapid, high-stakes scanning.
+- **Backend Contract Alignment**: The backend canonical entities are `PrescriptionRecord` and `PrescriptionItem`. The frontend may use UI-friendly labels like "history" or "medications", but it must not reintroduce misleading schema terms such as a child `Prescription` table for medication rows.
+- **Analysis Freshness Rule**: If medication rows are added, edited, or removed after an AI analysis completes, the cached analysis must be invalidated before the record can be saved. Never let the UI save stale analysis against a changed medication set.
+- **No Placeholder Analytics in Production Flows**: History counts, severity stats, filters, and exports must derive from live query data. Hardcoded dashboard metrics are acceptable only in isolated mockups, never in integrated application routes.
 
 ---
 

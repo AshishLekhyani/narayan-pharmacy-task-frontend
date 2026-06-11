@@ -48,9 +48,15 @@
 ### [June 11, 2026 - 5:35 PM] History Data Structure Refinement
 - **History Data Structure**: Restructured `history/page.tsx` to utilize realistic array data for medications (`drugs[]`). Replaced the "Prescribing Physician" view in the expanded accordion row with a clean, tabular view of the entered prescription details, adhering to the established design system tokens.
 
+### [June 11, 2026 - 7:20 PM] Backend Contract Alignment & History Screen Hardening
+- **Contract Realignment**: Updated the integrated frontend flow to save `medications[]` instead of overloading `prescriptions[]`, aligning the UI language with the corrected backend schema (`PrescriptionRecord` + `PrescriptionItem`).
+- **Clinical Safety Fix**: Added analysis invalidation whenever the medication list changes after a completed AI check. This prevents a stale interaction result from being saved against a modified prescription.
+- **Entry Flow Tightening**: Strengthened modal validation so a medication row now requires name, dosage, and a valid frequency before it can be committed. Added a proper empty state for the medication table and blocked analysis when no medications exist.
+- **History Screen Upgrade**: Replaced hardcoded dashboard metrics with live calculated values from backend data, added working patient/medication search, added a practical severity filter, and implemented CSV export from the visible dataset.
+- **Cleanup**: Removed leftover Material Symbols imports and unused layout imports to keep the UI code aligned with the established `lucide-react` standard.
+- **Validation Result**: `npm run lint` now passes in `Frontend`. Full `next build` and standalone `tsc --noEmit` remain blocked by locked stale `.next` artifacts in this workspace, not by current source lint failures.
 
----
+### [June 11, 2026 - 7:45 PM] Proxy Orchestration & Live Data Integration
+- **API Proxy**: Implemented Next.js `rewrites` in `next.config.ts` to cleanly proxy all frontend `/api/*` calls to the standalone Express backend on port 5000, avoiding complex CORS configurations.
+- **Data Hydration**: Refactored `history/page.tsx` from static mock data to live PostgreSQL data utilizing `@tanstack/react-query`, correctly mapping the flattened Prisma response columns back to the rich UI nested data architecture.
 
-## Pending Frontend Tasks
-- **[PENDING]** Update the `fetch` call in `src/app/page.tsx` to point to the production Python backend URL once it is available.
-- **[PENDING]** Handle potential timeout or 500-level error states in the UI if the future backend takes too long to respond.
