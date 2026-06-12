@@ -104,3 +104,10 @@
 - **No Raw JSON in UI**: Centralized `fetchJson()` + stricter `normalizeAnalysisResult()`; save flow uses `savePrescription()` helper.
 - **Error Handling**: Removed `alert()` on CSV export; all API paths surface human-readable `message` strings inline.
 
+### [June 12, 2026 - 2:00 PM] Deployment Readiness & Documentation
+- **Production Proxy**: `next.config.ts` now reads `BACKEND_INTERNAL_URL` (defaults to `http://localhost:5000`) so deployed Next.js can proxy `/api/*` to the live Express backend without code changes.
+- **Env Template**: Added `Frontend/.env.example`; updated `.gitignore` with `!.env.example` so the template can be committed.
+- **README**: Replaced default `create-next-app` README with project-specific setup, env vars, feature overview, and production deploy instructions.
+- **Final Audit**: `npm run build`, `npm run lint`, and `npm run verify:secrets` all pass. History severity tiers and expanded AI detail panel verified; prior `severityColor` runtime error resolved in current source.
+- **Validation Result**: Production build succeeds; app ready for deployment once backend `BACKEND_INTERNAL_URL` and backend `ANTHROPIC_API_KEY` are configured.
+
