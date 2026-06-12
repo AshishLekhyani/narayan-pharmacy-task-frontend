@@ -100,12 +100,29 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
 
-  const { data: dbHistory, isLoading, isError } = useQuery<HistoryResponse>({
+  const { data: dbHistory, isLoading, isError, error } = useQuery<HistoryResponse>({
     queryKey: ["history"],
     queryFn: async () => {
-      const response = await fetch("/api/history");
-      if (!response.ok) throw new Error("Failed to fetch history");
-      return response.json();
+      let response: Response;
+      try {
+        response = await fetch("/api/history");
+      } catch {
+        throw new Error("Unable to reach the server. Ensure the backend is running on port 5000.");
+      }
+
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw new Error("The server returned an unreadable response.");
+      }
+
+      if (!response.ok) {
+        const err = body as { message?: string };
+        throw new Error(err.message ?? "Failed to load prescription history.");
+      }
+
+      return body as HistoryResponse;
     },
   });
 
@@ -259,8 +276,12 @@ export default function HistoryPage() {
 
               {!isLoading && isError && (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-error">
-                    Unable to load prescription history right now.
+                  <td colSpan={7} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3 text-error">
+                      <AlertTriangle size={28} />
+                      <p className="font-semibold">Unable to load prescription history</p>
+                      <p className="text-body-sm text-on-surface-variant max-w-md">{error?.message}</p>
+                    </div>
                   </td>
                 </tr>
               )}

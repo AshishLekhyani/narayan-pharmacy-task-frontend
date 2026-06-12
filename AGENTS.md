@@ -4,54 +4,95 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-
 <!-- BEGIN:rules.md -->
 ## CLAUDE-INNOVATION-OS AGENT RULES
 
-**Purpose**: These rules define the operational standards for Claude-Innovation-OS (CIO) agents, ensuring they behave as strategic partners, creative innovators, and responsible executors. They govern how agents interpret requests, handle uncertainty, and interact with systems and users.
+**Purpose**: Operational standards for agents working on the Narayan Pharmacy frontend. Agents must behave as strategic partners, responsible executors, and continuous documentarians.
 
 ---
 
-### 1\. ROLE & BEHAVIOR
-- **Be a strategic partner**: Don’t just execute; challenge, refine, and improve prompts. Provide options when ambiguity exists.
-- **Be a creative innovator**: Don’t just follow patterns; introduce novelty, ask "what if," and propose unconventional solutions.
-- **Be a responsible executor**: Don’t just code; consider security, ethics, scalability, and long-term maintenance.
-- **Be a truth-seeker**: Verify claims. Cite sources. Distinguish between fact, hypothesis, and speculation.
+### 1. ROLE & BEHAVIOR
+- **Strategic partner**: Challenge ambiguous prompts; propose options when requirements conflict.
+- **Responsible executor**: Prioritize security, accessibility, clinical data integrity, and maintainability.
+- **Truth-seeker**: Verify claims against the running app and backend contract before declaring completion.
 
-### 2\. HANDLING UNCERTAINTY
-- **When unsure, ask**: Don’t guess critical details. Propose options and ask for clarification.
-- **When requirements conflict**: Identify trade-offs and recommend a resolution.
-- **When information is missing**: State assumptions explicitly.
+### 2. MANDATORY MEMORY GOVERNANCE
+- **Always read `AGENTS.md` and `MEMORY.md` before coding.**
+- **Always append to `MEMORY.md` after meaningful changes** with an accurate local timestamp, the *why*, and verification results.
+- Treat `MEMORY.md` as the project's live state tracker — never leave it stale after a session.
 
-### 3\. RESPONSE FORMATS
-- **Default structure**: For most tasks, use: **[Option/Strategy] → [Implementation] → [Risks/Trade-offs]**
-- **Code generation**: Must include type definitions, edge-case handling, and tests.
-- **Design work**: Must include rationale and accessibility notes.
-- **Critical decisions**: Must include impact analysis.
+### 3. PROJECT GUARDRAILS (Narayan Pharmacy Frontend)
 
-### 4\. INTERACTION PROTOCOL
-- **Continuous Documentation**: At every step, you MUST professionally update the `MEMORY.md` file. Treat it as a continuous state tracker. You must document your deliberate prompting strategies, any architectural trade-offs you considered, course corrections, and your progression of thinking.
-- **Before coding**: Always ask for clarification on scope and constraints.
-- **Before executing**: Summarize understanding and confirm the path forward.
-- **After implementation**: Provide a verification checklist.
+#### Business Context
+Custom-built for **Narayan Pharmacy** (regional Indian pharmacy operations). Preserve pharmacist-grade terminology, high data density, and Indian prescription frequency conventions (OD, BD, TDS, QID, SOS).
 
-### 5\. SELF-CORRECTION & LEARNING
-- **When corrected**: Update internal models immediately. Show gratitude.
-- **When you make a mistake**: Acknowledge it fully, explain what changed, and provide updated guidance.
-- **System updates**: Periodically review these rules and suggest improvements.
+#### Tech Stack (strict)
+| Layer | Choice |
+|-------|--------|
+| Framework | Next.js 16 App Router, React 19, TypeScript |
+| Async data | `@tanstack/react-query` for **all** server interactions |
+| Styling | Tailwind v4 (`@theme`) + CSS `clamp()` — no legacy Material Icons |
+| Icons | `lucide-react` only |
+| Motion | `framer-motion` for state transitions |
+| Scrolling | `lenis` via `Providers.tsx` — mount only after client hydration |
 
-### 6\. PROJECT SPECIFIC GUARDRAILS (Narayan Pharmacy)
-- **Business Context**: This application is custom-built for **Narayan Pharmacy**. Solutions should consider the operational realities of regional Indian pharmacy networks (e.g., specific drug naming conventions, localization context, and high patient volume interfaces).
-- **Tech Stack Compliance**: Strictly adhere to Next.js 15+ App Router conventions. Use `@tanstack/react-query` for ALL async data interactions. 
-- **Styling constraints**: Always use Tailwind v4 (`@theme`) combined with CSS `clamp()` for responsive text. Never use legacy Material Icons; rely strictly on `lucide-react`.
-- **Motion & UI UX**: Leverage `framer-motion` for all state changes. Native CSS transitions are discouraged for layout shifts. Do not break the `lenis` momentum scrolling wrapper in the root layout.
-- **Clinical Accuracy**: Always assume the end-user is a licensed pharmacist. Do not dumb down medical terminology. Ensure data density and typography (`data-mono`) are optimized for rapid, high-stakes scanning.
-- **Backend Contract Alignment**: The backend canonical entities are `PrescriptionRecord` and `PrescriptionItem`. The frontend may use UI-friendly labels like "history" or "medications", but it must not reintroduce misleading schema terms such as a child `Prescription` table for medication rows.
-- **Analysis Freshness Rule**: If medication rows are added, edited, or removed after an AI analysis completes, the cached analysis must be invalidated before the record can be saved. Never let the UI save stale analysis against a changed medication set.
-- **No Placeholder Analytics in Production Flows**: History counts, severity stats, filters, and exports must derive from live query data. Hardcoded dashboard metrics are acceptable only in isolated mockups, never in integrated application routes.
+#### Backend Contract
+- API is proxied: `/api/*` → `http://localhost:5000/api/*` (`next.config.ts` rewrites).
+- Canonical entities: `PrescriptionRecord` + `PrescriptionItem`. UI may say "history" / "medications" but must not reintroduce misleading `Prescription` child-table naming.
+- Save payload: `{ patientName, date, medications[], aiAnalysis }`.
+- Analyze requires **≥ 2 medications**; backend returns `{ status, message }` on errors.
+
+#### Clinical Safety Rules
+- **Analysis freshness**: Any add/edit/remove of medications after a successful AI analysis must invalidate (`analyzeMutation.reset()`) before save.
+- **No placeholder analytics**: History stats, filters, CSV export must use live query data.
+- **Minimum interaction check**: Disable analyze when `drugs.length < 2`; also guard in `requestDrugInteractionAnalysis()`.
+- **No raw JSON in UI**: Always normalize analyze responses through `src/lib/analysis-api.ts` before rendering.
+- **Graceful analyze failures**: Show inline error + Retry button; never clear form state on analyze error.
+
+#### Hydration Safety (critical)
+Never cause SSR/client text mismatches:
+- Do **not** read `sessionStorage` or `window` inside `useState` initializers.
+- Hydrate persisted draft via `useSessionDraft()` (`src/hooks/use-session-draft.ts` + `useSyncExternalStore`).
+- Do **not** use `toLocaleString()` without a fixed locale/timezone — use `src/lib/format-date.ts`.
+- Do **not** use `Date.now()` / `Math.random()` in render output.
+- Mount `ReactLenis` only after `isMounted` in `Providers.tsx`.
+
+#### Session Draft Persistence
+- Keys: `rx_patientName`, `rx_date`, `rx_drugs` in `sessionStorage`.
+- Survives in-tab navigation; cleared on successful save via `clearDraftSession()`.
+- Invalidate `["history"]` query after save so History page refetches.
+
+### 4. FILE MAP
+| Path | Responsibility |
+|------|----------------|
+| `src/app/page.tsx` | Prescription entry, modal workflow, analyze + save |
+| `src/app/history/page.tsx` | Live history table, search, filters, CSV export |
+| `src/app/Providers.tsx` | React Query + Lenis (client-only) |
+| `src/components/Navigation.tsx` | Active route highlighting |
+| `src/lib/analysis-api.ts` | Analyze fetch, error handling, response normalization |
+| `src/lib/format-date.ts` | SSR-safe date formatting |
+| `src/hooks/use-session-draft.ts` | `useSyncExternalStore` hook for draft state |
+| `src/lib/session-draft.ts` | Session draft read/write/clear helpers |
+| `src/components/SmoothScroll.tsx` | Client-only Lenis wrapper |
+| `src/types/prescription.ts` | Shared Medication / AnalysisResult types |
+
+### 5. EXECUTION WORKFLOW
+1. Read `MEMORY.md` + `AGENTS.md`.
+2. Confirm backend is running on port 5000.
+3. Implement with minimal, focused diffs matching existing conventions.
+4. Run `npm run lint` and `npm run build`.
+5. Append milestone to `MEMORY.md` with verification checklist.
+
+### 6. VERIFICATION CHECKLIST (run before declaring done)
+- [ ] `npm run lint` passes
+- [ ] `npm run build` passes
+- [ ] No hydration warnings in browser console on `/` and `/history`
+- [ ] Save flow persists to Neon and appears on History without manual refresh
+- [ ] Analyze button disabled with < 2 drugs; shows server error message when API key missing
+- [ ] Medication edits after analysis reset the analysis state
+- [ ] `MEMORY.md` updated with timestamp
 
 ---
 
 **End of Agent Rules**
-
 <!-- END:rules.md -->

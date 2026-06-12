@@ -67,3 +67,22 @@
 - **Inline Error UI**: The analyze result placeholder panel now shows a distinct error state (red AlertTriangle icon + the server's actual error message) when the mutation fails. Previously the error was only logged to the console.
 - **Real Error Messages**: The `analyzeMutation.mutationFn` now parses the JSON error body returned by the backend and surfaces its `message` field, replacing the generic `"Failed to analyze"` fallback.
 
+### [June 11, 2026 - 8:45 PM] Hydration Repair, Draft Persistence Hardening & Agent Docs
+- **Hydration Root Cause**: `sessionStorage` reads inside `useState` initializers caused SSR/client text mismatches. Replaced with `useSyncExternalStore` via `src/hooks/use-session-draft.ts` backed by `src/lib/session-draft.ts` (React-recommended external store pattern).
+- **Date Safety**: Centralized `todayIsoDate()` and `formatPrescribedAt()` in `src/lib/format-date.ts`; History table no longer uses locale-dependent `toLocaleString()`.
+- **Lenis Guard**: `SmoothScroll.tsx` loaded via `dynamic(..., { ssr: false })` in `Providers.tsx` to prevent scroll-wrapper DOM drift during hydration.
+- **Shared Types**: Extracted `Medication` and `AnalysisResult` to `src/types/prescription.ts` for reuse across entry and history flows.
+- **UX Polish**: Replaced `alert()` on save with dismissible inline success/error notices. Wired `Print Report` to `window.print()`. Analyze requests now strip client-only `id` fields before POST.
+- **AGENTS.md Enhancement**: Expanded with file map, hydration rules, verification checklist, and mandatory `MEMORY.md` update protocol.
+- **CLAUDE.md Correction**: Removed stale references to Python backend and non-existent `src/app/api/analyze/route.ts`; documented dual-server dev workflow.
+- **Validation Result**: `npm run build` passes. `npm run lint` passes.
+
+### [June 12, 2026 - 10:45 AM] Claude API UX Compliance Audit
+- **Analysis API Client**: Centralized fetch + response normalization in `src/lib/analysis-api.ts`. Raw JSON is parsed server-side and validated into typed clinical fields before any UI render — no JSON blobs shown to pharmacists.
+- **Error Resilience**: Network failures, unreadable responses, and server `message` errors surface inline with a **Retry Analysis** button. Form state (patient, drugs, date) is never cleared on analyze failure.
+- **Loading State**: Analyze button shows spinner + "Analyzing with Claude..."; results panel shows animated loading copy while `isPending`.
+- **Cache Transparency**: When backend serves a DB cache hit, UI shows a human-readable "Retrieved from cache" badge — not raw `cachedResult` JSON.
+- **Save Hardening**: Save mutation now handles network/unreadable errors gracefully and strips UI-only fields from `aiAnalysis` before POST.
+- **History Errors**: History query shows server/network error messages inline instead of a generic failure string.
+- **Validation Result**: `npm run lint` and `npm run build` pass.
+

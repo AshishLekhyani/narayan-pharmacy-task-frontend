@@ -8,7 +8,9 @@ import {
   PlusCircle, Trash2, FlaskConical, Loader2, 
   ClipboardList, AlertTriangle, ArrowRight, Sparkles, Pencil, X, ChevronDown 
 } from "lucide-react";
-import { todayIsoDate } from "../lib/format-date";
+import { useSessionDraft } from "../hooks/use-session-draft";
+import { requestDrugInteractionAnalysis } from "../lib/analysis-api";
+import type { AnalysisResult, Medication } from "../types/prescription";
 
 const FREQUENCY_PRESETS = [
   "OD (Once Daily)",
@@ -18,22 +20,6 @@ const FREQUENCY_PRESETS = [
   "SOS (As Needed)",
   "Custom..."
 ];
-
-type Medication = {
-  id: number;
-  name: string;
-  dosage: string;
-  frequency: string;
-};
-
-type AnalysisResult = {
-  severity: string;
-  severityLevel: string;
-  primaryWarning: string;
-  recommendation: string;
-  clinicalImpact: string[];
-  processedBy: string;
-};
 
 function FrequencyDropdown({ 
   value, 
@@ -153,27 +139,8 @@ function FrequencyDropdown({
 
 export default function PrescriptionEntryPage() {
   const queryClient = useQueryClient();
-
-  // --- Persistent state backed by sessionStorage (survives tab switches, clears on close) ---
-  const [patientName, setPatientName] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem("rx_patientName") ?? "";
-  });
-
-  const [date, setDate] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return sessionStorage.getItem("rx_date") ?? todayIsoDate();
-  });
-
-  const [drugs, setDrugs] = useState<Medication[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = sessionStorage.getItem("rx_drugs");
-      return stored ? (JSON.parse(stored) as Medication[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const { patientName, date, drugs, setPatientName, setDate, setDrugs, resetDraft } = useSessionDraft();
+  const [saveNotice, setSaveNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Modal State
   type DraftDrug = { 
@@ -189,20 +156,10 @@ export default function PrescriptionEntryPage() {
 
   const replaceDrugs = (nextDrugs: Medication[]) => {
     setDrugs(nextDrugs);
-    sessionStorage.setItem("rx_drugs", JSON.stringify(nextDrugs));
     if (analyzeMutation.isSuccess) {
       analyzeMutation.reset();
     }
   };
-
-  // Sync patientName & date to sessionStorage whenever they change
-  useEffect(() => { sessionStorage.setItem("rx_patientName", patientName); }, [patientName]);
-  useEffect(() => { sessionStorage.setItem("rx_date", date); }, [date]);
-
-  // Ensure date is always initialised to today on first mount if storage was empty
-  useEffect(() => {
-    if (!date) setDate(todayIsoDate());
-  }, []);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -287,27 +244,10 @@ export default function PrescriptionEntryPage() {
   };
 
   const analyzeMutation = useMutation<AnalysisResult, Error, Medication[]>({
-    mutationFn: async (currentDrugs: typeof drugs) => {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ medications: currentDrugs }),
-      });
-      if (!response.ok) {
-        // Surface the server's own error message instead of a generic string
-        let msg = "Failed to analyze";
-        try {
-          const errBody = await response.json();
-          if (errBody?.message) msg = errBody.message;
-        } catch {}
-        throw new Error(msg);
-      }
-      return response.json();
-    },
-    onError: (error: Error) => {
-      // Displayed inline — no alert needed, mutation.error drives the UI
-      console.error("[Analyze Error]:", error.message);
-    },
+    mutationFn: async (currentDrugs) =>
+      requestDrugInteractionAnalysis(
+        currentDrugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency }))
+      ),
   });
 
   const saveMutation = useMutation({
@@ -319,36 +259,51 @@ export default function PrescriptionEntryPage() {
         patientName,
         date,
         medications: drugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency })),
-        aiAnalysis: analyzeMutation.data || null
+        aiAnalysis: analyzeMutation.data
+          ? {
+              severity: analyzeMutation.data.severity,
+              severityLevel: analyzeMutation.data.severityLevel,
+              recommendation: analyzeMutation.data.recommendation,
+              primaryWarning: analyzeMutation.data.primaryWarning,
+              clinicalImpact: analyzeMutation.data.clinicalImpact,
+              processedBy: analyzeMutation.data.processedBy,
+            }
+          : null,
       };
 
-      const response = await fetch("/api/history", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      let response: Response;
+      try {
+        response = await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch {
+        throw new Error("Unable to reach the server. Ensure the backend is running and try again.");
+      }
+
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        throw new Error("The server returned an unreadable response while saving.");
+      }
 
       if (!response.ok) {
-        const err = await response.json();
+        const err = body as { message?: string };
         throw new Error(err.message || "Failed to save prescription.");
       }
-      return response.json();
+
+      return body;
     },
     onSuccess: () => {
-      alert("Prescription saved successfully!");
-      // Clear the persistent draft
-      sessionStorage.removeItem("rx_patientName");
-      sessionStorage.removeItem("rx_date");
-      sessionStorage.removeItem("rx_drugs");
-      setPatientName("");
-      setDate(todayIsoDate());
-      replaceDrugs([]);
+      resetDraft();
       analyzeMutation.reset();
-      // Trigger history page to refetch immediately
+      setSaveNotice({ type: "success", message: "Prescription saved successfully. View it on Prescription History." });
       queryClient.invalidateQueries({ queryKey: ["history"] });
     },
     onError: (error: Error) => {
-      alert(error.message);
+      setSaveNotice({ type: "error", message: error.message });
     }
   });
 
@@ -362,6 +317,33 @@ export default function PrescriptionEntryPage() {
         <h1 className="font-display-lg text-display-lg text-on-surface">New Prescription Entry</h1>
         <p className="text-on-surface-variant font-body-lg">Electronic submission and clinical safety validation.</p>
       </motion.div>
+
+      <AnimatePresence>
+        {saveNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className={`mb-6 rounded-lg border px-4 py-3 text-body-sm ${
+              saveNotice.type === "success"
+                ? "border-primary bg-primary-container/20 text-on-surface"
+                : "border-error bg-error-container/20 text-error"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-4">
+              <span>{saveNotice.message}</span>
+              <button
+                type="button"
+                onClick={() => setSaveNotice(null)}
+                className="text-on-surface-variant hover:text-on-surface"
+                aria-label="Dismiss notice"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="space-y-gutter">
         {/* Form Card */}
@@ -531,7 +513,15 @@ export default function PrescriptionEntryPage() {
                 <div className="flex flex-col items-center">
                   <AlertTriangle className="text-error mb-4" size={48} />
                   <p className="font-headline-sm text-error mb-1">Analysis Failed</p>
-                  <p className="text-body-sm text-on-surface-variant max-w-md">{analyzeMutation.error?.message}</p>
+                  <p className="text-body-sm text-on-surface-variant max-w-md mb-4">{analyzeMutation.error?.message}</p>
+                  <button
+                    type="button"
+                    className="px-5 py-2 rounded-full bg-primary text-on-primary font-bold text-body-sm hover:bg-primary/90 transition-colors disabled:opacity-60"
+                    disabled={analyzeMutation.isPending || drugs.length < 2}
+                    onClick={() => analyzeMutation.mutate(drugs)}
+                  >
+                    Retry Analysis
+                  </button>
                 </div>
               ) : analyzeMutation.isPending ? (
                 <div className="flex flex-col items-center">
@@ -568,6 +558,11 @@ export default function PrescriptionEntryPage() {
                       {analyzeMutation.data.severityLevel === "high" ? <AlertTriangle size={20} /> : <Sparkles size={20} />}
                     </div>
                     <h3 className="font-headline-md text-headline-md text-on-surface">Interaction Analysis Results</h3>
+                    {analyzeMutation.data.cachedResult && (
+                      <span className="text-xs font-data-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
+                        Retrieved from cache
+                      </span>
+                    )}
                   </div>
                   <span className={`px-3 py-1 rounded-full text-label-caps font-label-caps ${
                     analyzeMutation.data.severityLevel === "high"
@@ -637,7 +632,13 @@ export default function PrescriptionEntryPage() {
                     <span className="font-data-mono text-data-mono text-xs">Processed by {analyzeMutation.data.processedBy}</span>
                   </div>
                   <div className="flex gap-4">
-                    <button className="text-primary font-bold text-body-sm hover:underline">Print Report</button>
+                    <button
+                      type="button"
+                      className="text-primary font-bold text-body-sm hover:underline"
+                      onClick={() => window.print()}
+                    >
+                      Print Report
+                    </button>
                     <button 
                       className="bg-primary text-on-primary px-4 py-2 rounded font-bold text-body-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
                       onClick={() => saveMutation.mutate()}

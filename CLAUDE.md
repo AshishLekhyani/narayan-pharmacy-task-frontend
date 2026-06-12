@@ -1,39 +1,49 @@
 # Project Overview
 **Narayan Pharmacy - Clinical Prescription Validation System**
 
-PharmaSync Pro is a custom, clinical-grade web application engineered for **Narayan Pharmacy**. Its primary purpose is to modernize the prescription entry process and immediately interface with a Claude AI backend to run advanced pharmacokinetic and pharmacodynamic interaction checks.  
+A clinical-grade web application for **Narayan Pharmacy** that modernizes prescription entry and runs AI-driven drug interaction checks via a standalone Express backend.
 
 ## Tech Stack & Project Structure
-- **Frontend Framework**: Next.js 16 (App Router), React 19, TypeScript.
-- **Styling**: Tailwind CSS v4 with a custom "Clinical Precision" design system utilizing CSS `clamp()` for fluid typography.
-- **State Management**: `@tanstack/react-query` to manage asynchronous validation against API routes.
-- **Motion & Scrolling**: `framer-motion` for state transitions and `@studio-freight/react-lenis` for momentum scrolling.
-- **Project Structure**:
-  - `src/app/page.tsx`: Core prescription entry UI.
-  - `src/app/history/page.tsx`: Audit log and history UI.
-  - `src/app/api/analyze/route.ts`: API Endpoint orchestrating the simulated Claude AI inference logic.
-  - `src/components/`: Reusable modular components (future expansion).
+- **Frontend**: Next.js 16 (App Router), React 19, TypeScript
+- **Styling**: Tailwind CSS v4 with a custom "Clinical Precision" design system (`clamp()` fluid typography)
+- **State Management**: `@tanstack/react-query` for all async server interactions
+- **Motion & Scrolling**: `framer-motion` + `lenis` (client-only, see `Providers.tsx`)
+- **Backend**: Express 5 + Prisma + Neon PostgreSQL (separate `Backend/` folder, port 5000)
+- **AI**: Anthropic Claude via `POST /api/analyze` (proxied from frontend)
+
+### Key Files
+| Path | Purpose |
+|------|---------|
+| `src/app/page.tsx` | Prescription entry, modal workflow, analyze + save |
+| `src/app/history/page.tsx` | Live history with search, filters, CSV export |
+| `src/app/Providers.tsx` | React Query + Lenis wrapper |
+| `src/components/Navigation.tsx` | Route-aware nav links |
+| `src/lib/format-date.ts` | SSR-safe date formatting |
+| `src/lib/session-draft.ts` | Session draft persistence |
+| `next.config.ts` | Proxies `/api/*` → `http://localhost:5000/api/*` |
 
 ## How to Run Locally
-1. **Dependencies**: Run `npm install`
-2. **Environment Variables**: No `.env` is required for the frontend yet. Once the backend is built, `NEXT_PUBLIC_API_URL` will be required to point to the Python server.
-3. **Development**: Run `npm run dev` to start the local development server (http://localhost:3000).
-4. **Production Build**: Run `npm run build` followed by `npm start`.
+1. **Backend** (terminal 1):
+   ```bash
+   cd Backend && npm install && npm run db:generate && npm run dev
+   ```
+2. **Frontend** (terminal 2):
+   ```bash
+   cd Frontend && npm install && npm run dev
+   ```
+3. Open http://localhost:3000
 
 > [!NOTE]
-> **AI Agent Instructions**
-> If you are an AI assistant, you MUST also read `AGENTS.md` to understand the operational rules and behavioral protocols expected for this project.
+> **AI Agent Instructions**: Read `AGENTS.md` for operational rules and `MEMORY.md` for project history. Update `MEMORY.md` after every meaningful change.
 
 ## Key Conventions
-- **Strict Typing**: All components, props, and API payloads must be strongly typed using TypeScript interfaces. Avoid `any`.
-- **Component Organization**: Favor modular, pure functional components. Avoid monolithic files. 
-- **Naming Conventions**: Use PascalCase for components (`TopNavBar.tsx`), camelCase for utility functions, and kebab-case for CSS classes.
-- **API Patterns**: All data fetching must be executed via `@tanstack/react-query` mutations/queries communicating with Next.js API Routes, which will eventually proxy to the Python backend.
+- **Strict Typing**: Shared types in `src/types/prescription.ts`
+- **Icons**: `lucide-react` only (no Material Icons)
+- **Hydration safety**: Never read `sessionStorage` in `useState` initializers; hydrate in `useEffect`
+- **Clinical safety**: Invalidate AI analysis when medications change after analysis completes
 
 ## Constraints & Gotchas
-> [!WARNING]
-> **AI Inference Delays**
-> Always implement loading states (`interaction-loading`, `Loader2` spinners) to mask AI latency during interaction checks.
-
-- **Data Density**: Clinical data tables must use monospaced fonts (`data-mono`). Padding should be compact to allow high information density.
-- **Build Caching**: Always run `npm run build` after modifying global configurations (like `tailwind.config.ts`) before testing production behavior.
+- **Dual-server dev**: Frontend alone is not enough — backend must run on port 5000 for API calls.
+- **AI key optional locally**: Without `ANTHROPIC_API_KEY`, analyze returns 503 with a clear message.
+- **Analyze minimum**: Requires at least 2 medications (enforced frontend + backend).
+- **Build**: Run `npm run build` after config changes to verify production behavior.
