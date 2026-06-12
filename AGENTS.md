@@ -24,7 +24,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### 3. PROJECT GUARDRAILS (Narayan Pharmacy Frontend)
 
 #### Business Context
-Custom-built for **Narayan Pharmacy** (regional Indian pharmacy operations). Preserve pharmacist-grade terminology, high data density, and Indian prescription frequency conventions (OD, BD, TDS, QID, SOS).
+Custom-built for **Narayan Pharmacy** (US pharmacy operations). Preserve pharmacist-grade terminology, high data density, and US SIG conventions (QD, BID, TID, QID, PRN, QHS).
 
 #### Tech Stack (strict)
 | Layer | Choice |

@@ -166,4 +166,4 @@
 - **Stable Callbacks**: `useCallback` for modal close handlers on entry and history pages.
 - **Cleanup**: Removed dead `analysis-api.ts`, `savePrescription()`, and unused `analyzeApiResponseSchema`; updated README/AGENTS.md.
 - **Validation Result**: `npm run build` and `npm run lint` pass.
-
+- **Zod parity**: `analysis-schemas.ts` enforces `severity` enum and `clinicalImpact` min 2, matching backend normalization output.

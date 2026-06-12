@@ -7,7 +7,7 @@ import PortalDropdown from "../PortalDropdown";
 import ModalShell from "../ui/ModalShell";
 import {
   FREQUENCY_DROPDOWN_OPTIONS,
-  FREQUENCY_PRESETS,
+  resolveFrequencyPreset,
   type FrequencyPreset,
 } from "../../lib/frequency-presets";
 import { MAX_MEDICATIONS_PER_PRESCRIPTION } from "../../lib/clinical-constants";
@@ -42,7 +42,7 @@ function createEmptyDraft(): DraftDrug {
     id: Date.now(),
     name: "",
     dosage: "",
-    frequencyType: "OD (Once Daily)",
+    frequencyType: "Once daily (QD)",
     customFrequency: "",
   };
 }
@@ -58,13 +58,14 @@ function draftToEntry(draft: DraftDrug): MedicationFormEntry {
 
 function buildInitialDrafts(mode: "add" | "edit", editDrug?: Medication): DraftDrug[] {
   if (mode === "edit" && editDrug) {
-    const isPreset = (FREQUENCY_PRESETS as readonly string[]).includes(editDrug.frequency);
+    const resolved = resolveFrequencyPreset(editDrug.frequency);
+    const isPreset = resolved !== "Custom...";
     return [
       {
         id: editDrug.id,
         name: editDrug.name,
         dosage: editDrug.dosage,
-        frequencyType: isPreset ? (editDrug.frequency as FrequencyPreset) : "Custom...",
+        frequencyType: isPreset ? resolved : "Custom...",
         customFrequency: isPreset ? "" : editDrug.frequency,
       },
     ];

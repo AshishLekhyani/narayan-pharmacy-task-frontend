@@ -1,6 +1,6 @@
 # Narayan Pharmacy — Frontend
 
-Pharmacist-facing web app for prescription entry, AI drug-interaction screening, and prescription history. Built for **Narayan Pharmacy** (India regional dispensing context).
+Pharmacist-facing web app for prescription entry, AI drug-interaction screening, and prescription history. Built for **Narayan Pharmacy** (US dispensing context).
 
 ## Tech stack
 
