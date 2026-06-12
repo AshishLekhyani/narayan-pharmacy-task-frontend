@@ -9,7 +9,8 @@ import {
   ClipboardList, AlertTriangle, ArrowRight, Sparkles, Pencil, X, ChevronDown 
 } from "lucide-react";
 import { useSessionDraft } from "../hooks/use-session-draft";
-import { requestDrugInteractionAnalysis } from "../lib/analysis-api";
+import { requestPrescriptionAnalysis } from "../lib/analysis-api";
+import { savePrescription } from "../lib/history-api";
 import type { AnalysisResult, Medication } from "../types/prescription";
 
 const FREQUENCY_PRESETS = [
@@ -245,7 +246,7 @@ export default function PrescriptionEntryPage() {
 
   const analyzeMutation = useMutation<AnalysisResult, Error, Medication[]>({
     mutationFn: async (currentDrugs) =>
-      requestDrugInteractionAnalysis(
+      requestPrescriptionAnalysis(
         currentDrugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency }))
       ),
   });
@@ -255,7 +256,7 @@ export default function PrescriptionEntryPage() {
       if (!patientName.trim()) throw new Error("Patient Name is required.");
       if (drugs.length === 0) throw new Error("At least one medication is required.");
 
-      const payload = {
+      return savePrescription({
         patientName,
         date,
         medications: drugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency })),
@@ -269,32 +270,7 @@ export default function PrescriptionEntryPage() {
               processedBy: analyzeMutation.data.processedBy,
             }
           : null,
-      };
-
-      let response: Response;
-      try {
-        response = await fetch("/api/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } catch {
-        throw new Error("Unable to reach the server. Ensure the backend is running and try again.");
-      }
-
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        throw new Error("The server returned an unreadable response while saving.");
-      }
-
-      if (!response.ok) {
-        const err = body as { message?: string };
-        throw new Error(err.message || "Failed to save prescription.");
-      }
-
-      return body;
+      });
     },
     onSuccess: () => {
       resetDraft();
@@ -475,7 +451,7 @@ export default function PrescriptionEntryPage() {
         >
           <button
             className="group relative bg-primary text-on-primary px-8 py-4 rounded-full font-bold flex items-center gap-3 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed"
-            disabled={analyzeMutation.isPending || drugs.length < 2}
+            disabled={analyzeMutation.isPending || drugs.length < 1}
             onClick={() => analyzeMutation.mutate(drugs)}
           >
             {analyzeMutation.isPending ? (
@@ -486,13 +462,22 @@ export default function PrescriptionEntryPage() {
             ) : (
               <>
                 <FlaskConical size={24} />
-                <span>Check for Interactions (Claude AI)</span>
+                <span>
+                  {drugs.length === 1
+                    ? "Review Single Medication"
+                    : "Check for Interactions (Claude AI)"}
+                </span>
               </>
             )}
           </button>
-          {drugs.length < 2 && !analyzeMutation.isPending && (
+          {drugs.length === 0 && !analyzeMutation.isPending && (
             <p className="mt-3 text-body-sm text-on-surface-variant">
-              Add at least 2 medications to run an interaction analysis.
+              Add at least one medication to begin the review workflow.
+            </p>
+          )}
+          {drugs.length === 1 && !analyzeMutation.isPending && (
+            <p className="mt-3 text-body-sm text-on-surface-variant">
+              Single-medication review runs locally. Add a second drug to enable Claude interaction screening.
             </p>
           )}
         </motion.div>
@@ -517,7 +502,7 @@ export default function PrescriptionEntryPage() {
                   <button
                     type="button"
                     className="px-5 py-2 rounded-full bg-primary text-on-primary font-bold text-body-sm hover:bg-primary/90 transition-colors disabled:opacity-60"
-                    disabled={analyzeMutation.isPending || drugs.length < 2}
+                    disabled={analyzeMutation.isPending || drugs.length < 1}
                     onClick={() => analyzeMutation.mutate(drugs)}
                   >
                     Retry Analysis
@@ -558,9 +543,14 @@ export default function PrescriptionEntryPage() {
                       {analyzeMutation.data.severityLevel === "high" ? <AlertTriangle size={20} /> : <Sparkles size={20} />}
                     </div>
                     <h3 className="font-headline-md text-headline-md text-on-surface">Interaction Analysis Results</h3>
-                    {analyzeMutation.data.cachedResult && (
+                    {analyzeMutation.data.localResult && (
                       <span className="text-xs font-data-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
-                        Retrieved from cache
+                        Rules engine — no AI call
+                      </span>
+                    )}
+                    {analyzeMutation.data.cachedResult && !analyzeMutation.data.localResult && (
+                      <span className="text-xs font-data-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
+                        Retrieved from cache — no API call
                       </span>
                     )}
                   </div>

@@ -13,4 +13,5 @@ export type AnalysisResult = {
   clinicalImpact: string[];
   processedBy: string;
   cachedResult?: boolean;
+  localResult?: boolean;
 };

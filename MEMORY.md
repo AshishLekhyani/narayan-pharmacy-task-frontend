@@ -86,3 +86,21 @@
 - **History Errors**: History query shows server/network error messages inline instead of a generic failure string.
 - **Validation Result**: `npm run lint` and `npm run build` pass.
 
+### [June 12, 2026 - 11:30 AM] History Performance, Pagination, Filters & Single-Drug Workflow
+- **Server-Side History**: Migrated history list to paginated API (`page`, `limit=10`, `search`, `filter`) with debounced search (300ms) and `placeholderData` for instant filter/page transitions.
+- **PortalDropdown**: Replaced native `<select>` filter with portal-based dropdown matching prescription entry UX.
+- **Working Pagination**: Prev/next + numbered page buttons driven by API `meta.totalPages`; shows `X–Y of Z matching records`.
+- **Single-Drug Flow**: `requestPrescriptionAnalysis()` returns local rules-engine result for 1 medication (no Claude call); 2+ drugs use Claude with DB cache badge.
+- **CSV Export**: Fetches all matching filtered rows in chunks (up to 500) for export.
+- **Validation Result**: `npm run lint` and `npm run build` pass.
+
+### [June 12, 2026 - 12:00 PM] History Detail Severity Tiers & Interaction Panel
+- **Severity Tiers**: Added `clinical-severity.ts` mapping stored AI labels to **Mild / Moderate / Severe** badges on the history table.
+- **Detail View**: Expanded row now shows full AI interaction result — interaction status, primary warning, recommendation, clinical impact, and tier-coloured panels (not always red).
+- **CSV**: Export includes clinical severity tier column.
+
+### [June 12, 2026 - 12:15 PM] Security Red-Flag Audit
+- **Secrets**: Confirmed `.env` is gitignored; added `npm run verify:secrets` scanner. No hardcoded API keys in source.
+- **No Raw JSON in UI**: Centralized `fetchJson()` + stricter `normalizeAnalysisResult()`; save flow uses `savePrescription()` helper.
+- **Error Handling**: Removed `alert()` on CSV export; all API paths surface human-readable `message` strings inline.
+

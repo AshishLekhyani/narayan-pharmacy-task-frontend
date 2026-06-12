@@ -83,7 +83,12 @@ Never cause SSR/client text mismatches:
 4. Run `npm run lint` and `npm run build`.
 5. Append milestone to `MEMORY.md` with verification checklist.
 
-### 6. VERIFICATION CHECKLIST (run before declaring done)
+### 6. SECURITY RED FLAGS (must never exist)
+- **No hardcoded API keys** — secrets live only in `Backend/.env` (gitignored). Run `npm run verify:secrets` before commit.
+- **No raw Claude JSON in UI** — all analyze responses pass through `normalizeAnalysisResult()`; render only typed clinical fields.
+- **No unhandled API calls** — use `fetchJson()` / `savePrescription()` / `requestPrescriptionAnalysis()`; surface `message` strings inline, never `alert()` or raw response bodies.
+
+### 7. VERIFICATION CHECKLIST (run before declaring done)
 - [ ] `npm run lint` passes
 - [ ] `npm run build` passes
 - [ ] No hydration warnings in browser console on `/` and `/history`
