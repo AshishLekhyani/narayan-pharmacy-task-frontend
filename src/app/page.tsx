@@ -8,9 +8,15 @@ import {
   PlusCircle, Trash2, FlaskConical, Loader2, 
   ClipboardList, AlertTriangle, ArrowRight, Sparkles, Pencil, X, ChevronDown 
 } from "lucide-react";
+import { usePersistedAnalysis } from "../hooks/use-persisted-analysis";
 import { useSessionDraft } from "../hooks/use-session-draft";
 import { requestPrescriptionAnalysis } from "../lib/analysis-api";
-import { savePrescription } from "../lib/history-api";
+import { buildAiAnalysisPayload, savePrescription } from "../lib/history-api";
+import {
+  validateMedicationEntry,
+  validatePatientName,
+  validatePrescriptionDate,
+} from "../lib/prescription-validation";
 import type { AnalysisResult, Medication } from "../types/prescription";
 
 const FREQUENCY_PRESETS = [
@@ -141,7 +147,11 @@ function FrequencyDropdown({
 export default function PrescriptionEntryPage() {
   const queryClient = useQueryClient();
   const { patientName, date, drugs, setPatientName, setDate, setDrugs, resetDraft } = useSessionDraft();
+  const { session: persistedSession, persist, clear: clearPersistedAnalysis, invalidateIfPrescriptionChanged } =
+    usePersistedAnalysis();
   const [saveNotice, setSaveNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [patientNameError, setPatientNameError] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   // Modal State
   type DraftDrug = { 
@@ -155,12 +165,9 @@ export default function PrescriptionEntryPage() {
   const [modalMode, setModalMode] = useState<"add" | "edit">("add");
   const [draftDrugs, setDraftDrugs] = useState<DraftDrug[]>([]);
 
-  const replaceDrugs = (nextDrugs: Medication[]) => {
-    setDrugs(nextDrugs);
-    if (analyzeMutation.isSuccess) {
-      analyzeMutation.reset();
-    }
-  };
+  useEffect(() => {
+    invalidateIfPrescriptionChanged(patientName, date, drugs);
+  }, [patientName, date, drugs, invalidateIfPrescriptionChanged]);
 
   useEffect(() => {
     if (isModalOpen) {
@@ -209,14 +216,101 @@ export default function PrescriptionEntryPage() {
     }
   };
 
+  const analyzeMutation = useMutation<AnalysisResult, Error, Medication[]>({
+    mutationFn: async (currentDrugs) => {
+      const trimmedName = patientName.trim();
+      const nameError = validatePatientName(trimmedName);
+      if (nameError) throw new Error(nameError);
+
+      const dateError = validatePrescriptionDate(date);
+      if (dateError) throw new Error(dateError);
+
+      if (currentDrugs.length === 0) {
+        throw new Error("Add at least one medication before running analysis.");
+      }
+
+      const medications = currentDrugs.map(({ name, dosage, frequency }) => {
+        const entry = { name: name.trim(), dosage: dosage.trim(), frequency: frequency.trim() };
+        const medicationError = validateMedicationEntry(entry);
+        if (medicationError) throw new Error(medicationError);
+        return entry;
+      });
+
+      const analysis = await requestPrescriptionAnalysis(medications);
+
+      await savePrescription({
+        patientName: trimmedName,
+        date,
+        medications,
+        aiAnalysis: buildAiAnalysisPayload(analysis),
+      });
+
+      return analysis;
+    },
+    onSuccess: (analysis) => {
+      persist({
+        analysis,
+        patientName: patientName.trim(),
+        date,
+        drugs: [...drugs],
+      });
+      const cacheNote = analysis.cachedResult ? " Analysis served from cache — no new AI charge." : "";
+      setSaveNotice({
+        type: "success",
+        message: `Prescription analyzed and saved to history.${cacheNote} Results stay visible until you start a new prescription.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["history"] });
+    },
+    onError: (error: Error) => {
+      setSaveNotice({ type: "error", message: error.message });
+    },
+  });
+
+  const replaceDrugs = (nextDrugs: Medication[]) => {
+    setDrugs(nextDrugs);
+    invalidateIfPrescriptionChanged(patientName, date, nextDrugs);
+    if (analyzeMutation.isSuccess) {
+      analyzeMutation.reset();
+    }
+  };
+
+  const startNewPrescription = () => {
+    resetDraft();
+    clearPersistedAnalysis();
+    analyzeMutation.reset();
+    setSaveNotice(null);
+    setPatientNameError(null);
+  };
+
+  const analysisResult = analyzeMutation.data ?? persistedSession?.analysis ?? null;
+  const showAnalysisResults = Boolean(analysisResult) && !analyzeMutation.isPending;
+
   const saveMedication = () => {
+    setModalError(null);
     const validDrafts = draftDrugs.filter(
       (d) =>
         d.name.trim() !== "" &&
         d.dosage.trim() !== "" &&
         (d.frequencyType === "Custom..." ? d.customFrequency.trim() !== "" : true)
     );
-    if (validDrafts.length === 0) return;
+    if (validDrafts.length === 0) {
+      setModalError("Complete drug name, dosage, and frequency for at least one row.");
+      return;
+    }
+
+    for (const draft of validDrafts) {
+      const frequency =
+        draft.frequencyType === "Custom..." ? draft.customFrequency.trim() : draft.frequencyType;
+      const validationError = validateMedicationEntry({
+        name: draft.name.trim(),
+        dosage: draft.dosage.trim(),
+        frequency,
+      });
+      if (validationError) {
+        setModalError(validationError);
+        return;
+      }
+    }
     
     if (modalMode === "add") {
       replaceDrugs([
@@ -243,45 +337,6 @@ export default function PrescriptionEntryPage() {
   const removeRow = (id: number) => {
     replaceDrugs(drugs.filter((d) => d.id !== id));
   };
-
-  const analyzeMutation = useMutation<AnalysisResult, Error, Medication[]>({
-    mutationFn: async (currentDrugs) =>
-      requestPrescriptionAnalysis(
-        currentDrugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency }))
-      ),
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!patientName.trim()) throw new Error("Patient Name is required.");
-      if (drugs.length === 0) throw new Error("At least one medication is required.");
-
-      return savePrescription({
-        patientName,
-        date,
-        medications: drugs.map(({ name, dosage, frequency }) => ({ name, dosage, frequency })),
-        aiAnalysis: analyzeMutation.data
-          ? {
-              severity: analyzeMutation.data.severity,
-              severityLevel: analyzeMutation.data.severityLevel,
-              recommendation: analyzeMutation.data.recommendation,
-              primaryWarning: analyzeMutation.data.primaryWarning,
-              clinicalImpact: analyzeMutation.data.clinicalImpact,
-              processedBy: analyzeMutation.data.processedBy,
-            }
-          : null,
-      });
-    },
-    onSuccess: () => {
-      resetDraft();
-      analyzeMutation.reset();
-      setSaveNotice({ type: "success", message: "Prescription saved successfully. View it on Prescription History." });
-      queryClient.invalidateQueries({ queryKey: ["history"] });
-    },
-    onError: (error: Error) => {
-      setSaveNotice({ type: "error", message: error.message });
-    }
-  });
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -336,12 +391,21 @@ export default function PrescriptionEntryPage() {
             <div className="space-y-1">
               <label className="text-on-surface-variant font-label-caps text-label-caps block">Patient Name</label>
               <input
-                className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
-                placeholder="e.g. Johnathan Doe"
+                className={`w-full bg-surface-container-lowest border text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary ${
+                  patientNameError ? "border-error" : "border-outline"
+                }`}
+                placeholder="e.g. Rajesh Kumar"
                 type="text"
                 value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
+                onChange={(e) => {
+                  setPatientName(e.target.value);
+                  if (patientNameError) setPatientNameError(null);
+                }}
+                onBlur={() => setPatientNameError(validatePatientName(patientName))}
               />
+              {patientNameError && (
+                <p className="text-body-sm text-error mt-1">{patientNameError}</p>
+              )}
             </div>
             <div className="space-y-1">
               <label className="text-on-surface-variant font-label-caps text-label-caps block">Date</label>
@@ -451,40 +515,63 @@ export default function PrescriptionEntryPage() {
         >
           <button
             className="group relative bg-primary text-on-primary px-8 py-4 rounded-full font-bold flex items-center gap-3 shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-60 disabled:hover:scale-100 disabled:cursor-not-allowed"
-            disabled={analyzeMutation.isPending || drugs.length < 1}
-            onClick={() => analyzeMutation.mutate(drugs)}
+            disabled={
+              analyzeMutation.isPending ||
+              drugs.length < 1 ||
+              Boolean(validatePatientName(patientName)) ||
+              Boolean(validatePrescriptionDate(date))
+            }
+            onClick={() => {
+              const nameError = validatePatientName(patientName);
+              if (nameError) {
+                setPatientNameError(nameError);
+                setSaveNotice({ type: "error", message: nameError });
+                return;
+              }
+              analyzeMutation.mutate(drugs);
+            }}
           >
             {analyzeMutation.isPending ? (
               <>
                 <Loader2 className="animate-spin" size={24} />
-                <span>Analyzing with Claude...</span>
+                <span>Analyzing & saving to history...</span>
               </>
             ) : (
               <>
                 <FlaskConical size={24} />
                 <span>
                   {drugs.length === 1
-                    ? "Review Single Medication"
-                    : "Check for Interactions (Claude AI)"}
+                    ? "Review & Save Single Medication"
+                    : "Analyze Interactions & Save to History"}
                 </span>
               </>
             )}
           </button>
+          {patientName.trim().length < 2 && drugs.length > 0 && !analyzeMutation.isPending && (
+            <p className="mt-3 text-body-sm text-on-surface-variant">
+              Enter the patient name above before analysis can be saved to history.
+            </p>
+          )}
           {drugs.length === 0 && !analyzeMutation.isPending && (
             <p className="mt-3 text-body-sm text-on-surface-variant">
               Add at least one medication to begin the review workflow.
             </p>
           )}
-          {drugs.length === 1 && !analyzeMutation.isPending && (
+          {drugs.length === 1 && patientName.trim().length >= 2 && !analyzeMutation.isPending && (
             <p className="mt-3 text-body-sm text-on-surface-variant">
-              Single-medication review runs locally. Add a second drug to enable Claude interaction screening.
+              Single-medication review runs locally (no AI charge). Results are saved automatically.
+            </p>
+          )}
+          {drugs.length >= 2 && patientName.trim().length >= 2 && !analyzeMutation.isPending && (
+            <p className="mt-3 text-body-sm text-on-surface-variant">
+              Repeat drug combinations use the server cache — no extra AI charge when cached.
             </p>
           )}
         </motion.div>
 
         {/* Analysis Result Area */}
         <AnimatePresence mode="wait">
-          {!analyzeMutation.isSuccess && (
+          {!showAnalysisResults && (
             <motion.div
               key="placeholder"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -511,9 +598,11 @@ export default function PrescriptionEntryPage() {
               ) : analyzeMutation.isPending ? (
                 <div className="flex flex-col items-center">
                   <Loader2 className="animate-spin text-primary mb-4" size={48} />
-                  <p className="font-display-lg text-headline-md text-primary">Scanning clinical databases...</p>
+                  <p className="font-display-lg text-headline-md text-primary">Analyzing and saving prescription...</p>
                   <p className="text-on-surface-variant font-data-mono mt-2">
-                    Checking pharmacokinetic interactions for {drugs.length} medications...
+                    {drugs.length >= 2
+                      ? `Checking interactions for ${drugs.length} medications, then writing to history...`
+                      : `Running local review for ${patientName.trim()}, then saving to history...`}
                   </p>
                 </div>
               ) : (
@@ -525,7 +614,7 @@ export default function PrescriptionEntryPage() {
             </motion.div>
           )}
 
-          {analyzeMutation.isSuccess && (
+          {showAnalysisResults && analysisResult && (
             <motion.div 
               key="result"
               initial={{ opacity: 0, y: 40 }}
@@ -536,32 +625,41 @@ export default function PrescriptionEntryPage() {
                 <div className="p-6 border-b border-outline-variant flex items-center justify-between bg-surface-container-low">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      analyzeMutation.data.severityLevel === "high" 
+                      analysisResult.severityLevel === "high" 
                         ? "bg-error-container text-on-error-container" 
                         : "bg-primary-container text-on-primary-container"
                     }`}>
-                      {analyzeMutation.data.severityLevel === "high" ? <AlertTriangle size={20} /> : <Sparkles size={20} />}
+                      {analysisResult.severityLevel === "high" ? <AlertTriangle size={20} /> : <Sparkles size={20} />}
                     </div>
                     <h3 className="font-headline-md text-headline-md text-on-surface">Interaction Analysis Results</h3>
-                    {analyzeMutation.data.localResult && (
+                    {analysisResult.localResult && (
                       <span className="text-xs font-data-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
                         Rules engine — no AI call
                       </span>
                     )}
-                    {analyzeMutation.data.cachedResult && !analyzeMutation.data.localResult && (
+                    {analysisResult.cachedResult && !analysisResult.localResult && (
                       <span className="text-xs font-data-mono text-on-surface-variant bg-surface-container px-2 py-1 rounded">
                         Retrieved from cache — no API call
                       </span>
                     )}
                   </div>
                   <span className={`px-3 py-1 rounded-full text-label-caps font-label-caps ${
-                    analyzeMutation.data.severityLevel === "high"
+                    analysisResult.severityLevel === "high"
                       ? "bg-error-container text-on-error-container"
                       : "bg-primary-container text-on-primary-container"
                   }`}>
-                    {analyzeMutation.data.severity}
+                    {analysisResult.severity}
                   </span>
                 </div>
+                {persistedSession && (
+                  <div className="px-6 py-3 bg-surface-container-low border-b border-outline-variant text-body-sm text-on-surface-variant">
+                    Saved for <span className="font-semibold text-on-surface">{persistedSession.patientName}</span>
+                    {" · "}
+                    {persistedSession.drugs.length} medication(s)
+                    {" · "}
+                    Results persist while you review history in this tab.
+                  </div>
+                )}
                 <div className="p-8 space-y-8">
                   {/* Severity Section */}
                   <section>
@@ -571,12 +669,12 @@ export default function PrescriptionEntryPage() {
                     <div className="flex gap-4">
                       <div className="flex-1">
                         <p className={`font-semibold mb-2 ${
-                          analyzeMutation.data.severityLevel === "high" ? "text-error" : "text-on-surface"
+                          analysisResult.severityLevel === "high" ? "text-error" : "text-on-surface"
                         }`}>
-                          {analyzeMutation.data.primaryWarning}
+                          {analysisResult.primaryWarning}
                         </p>
                         <p className="text-on-surface-variant font-body-sm leading-relaxed">
-                          {analyzeMutation.data.recommendation}
+                          {analysisResult.recommendation}
                         </p>
                       </div>
                     </div>
@@ -588,7 +686,7 @@ export default function PrescriptionEntryPage() {
                         Clinical Impact
                       </h4>
                       <ul className="space-y-3">
-                        {analyzeMutation.data.clinicalImpact.map((impact: string, i: number) => (
+                        {analysisResult.clinicalImpact.map((impact: string, i: number) => (
                           <motion.li 
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
@@ -597,7 +695,7 @@ export default function PrescriptionEntryPage() {
                             className="flex items-start gap-2"
                           >
                             <ArrowRight className={`mt-1 shrink-0 ${
-                              analyzeMutation.data.severityLevel === "high" ? "text-error" : "text-primary"
+                              analysisResult.severityLevel === "high" ? "text-error" : "text-primary"
                             }`} size={16} />
                             <span className="text-body-sm">{impact}</span>
                           </motion.li>
@@ -610,18 +708,19 @@ export default function PrescriptionEntryPage() {
                         </h4>
                         <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
                           <p className="text-body-sm text-on-surface italic font-medium">
-                          &quot;{analyzeMutation.data.recommendation}&quot;
+                          &quot;{analysisResult.recommendation}&quot;
                         </p>
                       </div>
                     </section>
                   </div>
                 </div>
-                <div className="px-6 py-4 bg-surface-container-highest flex justify-between items-center">
+                <div className="px-6 py-4 bg-surface-container-highest flex flex-wrap justify-between items-center gap-4">
                   <div className="flex items-center gap-2 text-on-surface-variant">
                     <Sparkles size={16} />
-                    <span className="font-data-mono text-data-mono text-xs">Processed by {analyzeMutation.data.processedBy}</span>
+                    <span className="font-data-mono text-data-mono text-xs">Processed by {analysisResult.processedBy}</span>
                   </div>
-                  <div className="flex gap-4">
+                  <div className="flex gap-4 items-center">
+                    <span className="text-body-sm text-primary font-semibold">Saved to Prescription History</span>
                     <button
                       type="button"
                       className="text-primary font-bold text-body-sm hover:underline"
@@ -629,12 +728,12 @@ export default function PrescriptionEntryPage() {
                     >
                       Print Report
                     </button>
-                    <button 
-                      className="bg-primary text-on-primary px-4 py-2 rounded font-bold text-body-sm hover:bg-primary/90 transition-colors disabled:opacity-50"
-                      onClick={() => saveMutation.mutate()}
-                      disabled={saveMutation.isPending}
+                    <button
+                      type="button"
+                      className="bg-surface border border-outline-variant text-on-surface px-4 py-2 rounded font-bold text-body-sm hover:bg-surface-container transition-colors"
+                      onClick={startNewPrescription}
                     >
-                      {saveMutation.isPending ? "Saving..." : analyzeMutation.data.severityLevel === "high" ? "Flag & Save for Pharmacist Review" : "Approve & Save Prescription"}
+                      Start New Prescription
                     </button>
                   </div>
                 </div>
@@ -669,6 +768,11 @@ export default function PrescriptionEntryPage() {
               
               {/* Scrollable Body */}
               <div data-lenis-prevent className="modal-scroll-area p-6 space-y-6 overflow-y-auto">
+                {modalError && (
+                  <div className="rounded-lg border border-error bg-error-container/20 px-4 py-3 text-body-sm text-error">
+                    {modalError}
+                  </div>
+                )}
                 <AnimatePresence initial={false}>
                   {draftDrugs.map((draft, index) => (
                     <motion.div 

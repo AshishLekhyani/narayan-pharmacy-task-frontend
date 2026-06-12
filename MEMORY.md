@@ -111,3 +111,19 @@
 - **Final Audit**: `npm run build`, `npm run lint`, and `npm run verify:secrets` all pass. History severity tiers and expanded AI detail panel verified; prior `severityColor` runtime error resolved in current source.
 - **Validation Result**: Production build succeeds; app ready for deployment once backend `BACKEND_INTERNAL_URL` and backend `ANTHROPIC_API_KEY` are configured.
 
+### [June 12, 2026 - 4:30 PM] Auto-Save Workflow, Batch Delete & Cache Hardening
+- **Root Cause (missing history)**: Analyze previously did not persist to the DB — users had to click a separate Save button after scanning. Many users only ran analysis and never saved.
+- **Auto-Save**: Prescription entry now runs analyze → save in one step. Patient name (≥2 chars) is required before the action. Success notice confirms history write and cache hits.
+- **Batch Delete**: Added `DELETE /api/history/batch` and history page checkboxes with “Delete Selected (N)” for bulk removal.
+- **Cache Reliability**: Analyze route now `await`s `analysisCache.upsert()` instead of fire-and-forget `create`, preventing silent cache misses on Neon.
+- **Validation Result**: `npm run build` and `npm run lint` pass in both repos.
+
+### [June 12, 2026 - 5:15 PM] Persisted Analysis Results & Clinical Input Validation
+- **Persisted Results**: Last analysis + prescription snapshot stored in `sessionStorage` (`rx_lastAnalysis`) via `use-persisted-analysis` — survives navigation to History and back in the same tab.
+- **Start New Prescription**: Clears draft, persisted analysis, and mutation state when pharmacist is done reviewing.
+- **Input Validation**: `prescription-validation.ts` blocks junk patient names, drug names, dosages (e.g. `10mg`), and frequencies on modal save and before analyze/save; inline errors on patient field and modal.
+- **Invalidation**: Editing patient, date, or drugs after analysis clears stale persisted results.
+
+### [June 12, 2026 - 5:30 PM] Unrecognized Drug Severity Mapping
+- **Clinical Severity**: `clinical-severity.ts` maps backend label `Drug Identification Required` to **Moderate** tier so fictional/unknown drug responses surface clearly in history without pretending to be a verified safe interaction.
+

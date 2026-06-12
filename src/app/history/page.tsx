@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Download,
@@ -11,17 +11,18 @@ import {
   Sparkles,
   CheckCircle2,
   ChevronDown,
-  MoreVertical,
   ChevronLeft,
   ChevronRight,
   CheckCircle,
   Loader2,
   ArrowRight,
+  Trash2,
 } from "lucide-react";
 import { formatPrescribedAt } from "../../lib/format-date";
 import PortalDropdown from "../../components/PortalDropdown";
 import { useDebouncedValue } from "../../hooks/use-debounced-value";
 import {
+  deleteHistoryRecords,
   fetchHistoryForExport,
   fetchHistoryPage,
   type HistoryFilterMode,
@@ -88,12 +89,16 @@ function downloadCsv(records: PrescriptionHistoryRecord[]) {
 }
 
 export default function HistoryPage() {
+  const queryClient = useQueryClient();
   const [expandedRows, setExpandedRows] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterMode, setFilterMode] = useState<HistoryFilterMode>("all");
   const [page, setPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
@@ -109,7 +114,10 @@ export default function HistoryPage() {
     placeholderData: (previous) => previous,
   });
 
-  const records = data?.data ?? [];
+  const records = useMemo(() => data?.data ?? [], [data?.data]);
+  const recordIdsOnPage = useMemo(() => records.map((record) => record.id), [records]);
+  const allOnPageSelected =
+    recordIdsOnPage.length > 0 && recordIdsOnPage.every((id) => selectedIds.includes(id));
   const meta = data?.meta;
   const stats = data?.stats ?? {
     totalRecords: 0,
@@ -133,10 +141,48 @@ export default function HistoryPage() {
     return pages;
   }, [page, totalPages]);
 
+  const deleteMutation = useMutation({
+    mutationFn: (ids: number[]) => deleteHistoryRecords(ids),
+    onSuccess: (result) => {
+      setSelectedIds([]);
+      setExpandedRows([]);
+      setDeleteError(null);
+      setDeleteNotice(`Deleted ${result.deletedCount} record(s) from history.`);
+      queryClient.invalidateQueries({ queryKey: ["history"] });
+    },
+    onError: (err: Error) => {
+      setDeleteNotice(null);
+      setDeleteError(err.message);
+    },
+  });
+
   const toggleRow = (id: number) => {
     setExpandedRows((prev) =>
       prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
     );
+  };
+
+  const toggleSelected = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((rowId) => rowId !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllOnPage = () => {
+    if (allOnPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !recordIdsOnPage.includes(id)));
+      return;
+    }
+    setSelectedIds((prev) => [...new Set([...prev, ...recordIdsOnPage])]);
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.length === 0) return;
+    const confirmed = window.confirm(
+      `Delete ${selectedIds.length} selected prescription record(s)? This cannot be undone.`
+    );
+    if (!confirmed) return;
+    deleteMutation.mutate(selectedIds);
   };
 
   const handleExport = async () => {
@@ -158,6 +204,24 @@ export default function HistoryPage() {
         <div className="mb-4 rounded-lg border border-error bg-error-container/20 px-4 py-3 text-body-sm text-error flex justify-between gap-4">
           <span>{exportError}</span>
           <button type="button" onClick={() => setExportError(null)} className="text-on-surface-variant hover:text-on-surface">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {deleteError && (
+        <div className="mb-4 rounded-lg border border-error bg-error-container/20 px-4 py-3 text-body-sm text-error flex justify-between gap-4">
+          <span>{deleteError}</span>
+          <button type="button" onClick={() => setDeleteError(null)} className="text-on-surface-variant hover:text-on-surface">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {deleteNotice && (
+        <div className="mb-4 rounded-lg border border-primary bg-primary-container/20 px-4 py-3 text-body-sm text-on-surface flex justify-between gap-4">
+          <span>{deleteNotice}</span>
+          <button type="button" onClick={() => setDeleteNotice(null)} className="text-on-surface-variant hover:text-on-surface">
             Dismiss
           </button>
         </div>
@@ -206,6 +270,23 @@ export default function HistoryPage() {
             {isExporting ? <Loader2 className="animate-spin text-primary" size={18} /> : <Download size={18} className="text-primary" />}
             <span>{isExporting ? "Exporting..." : "Export CSV"}</span>
           </button>
+          <button
+            type="button"
+            className="flex items-center gap-2 px-4 py-2 bg-error text-on-error rounded-lg text-body-sm font-bold hover:bg-error/90 transition-colors disabled:opacity-50"
+            onClick={handleBatchDelete}
+            disabled={selectedIds.length === 0 || deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <Trash2 size={18} />
+            )}
+            <span>
+              {deleteMutation.isPending
+                ? "Deleting..."
+                : `Delete Selected (${selectedIds.length})`}
+            </span>
+          </button>
         </div>
       </header>
 
@@ -245,13 +326,22 @@ export default function HistoryPage() {
           <table className="w-full border-collapse">
             <thead className="bg-surface-container-low border-b border-outline-variant">
               <tr>
+                <th className="w-12 px-4 py-3 text-center">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary cursor-pointer"
+                    checked={allOnPageSelected}
+                    onChange={toggleSelectAllOnPage}
+                    disabled={records.length === 0 || isLoading}
+                    aria-label="Select all records on this page"
+                  />
+                </th>
                 <th className="w-12 px-4 py-3" />
                 <th className="text-left px-6 py-3 text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Patient Name</th>
                 <th className="text-left px-6 py-3 text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Prescription Date</th>
                 <th className="text-center px-6 py-3 text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Drug Count</th>
                 <th className="text-left px-6 py-3 text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">AI Safety Status</th>
                 <th className="text-left px-6 py-3 text-label-caps font-label-caps text-on-surface-variant uppercase tracking-wider">Severity</th>
-                <th className="w-12 px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant">
@@ -313,6 +403,15 @@ export default function HistoryPage() {
                       className={`interaction-row transition-colors cursor-pointer ${isExpanded ? "bg-surface-container-lowest" : ""}`}
                       onClick={() => toggleRow(record.id)}
                     >
+                      <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-primary cursor-pointer"
+                          checked={selectedIds.includes(record.id)}
+                          onChange={() => toggleSelected(record.id)}
+                          aria-label={`Select ${record.patientName}`}
+                        />
+                      </td>
                       <td className="px-4 py-4 text-center">
                         <motion.div
                           animate={{ rotate: isExpanded ? 180 : 0 }}
@@ -343,11 +442,6 @@ export default function HistoryPage() {
                         ) : (
                           <span className="text-body-sm text-on-surface-variant">—</span>
                         )}
-                      </td>
-                      <td className="px-4 py-4">
-                        <button type="button" className="p-1 hover:bg-surface-container rounded-full transition-colors text-outline" aria-label="More actions">
-                          <MoreVertical size={20} />
-                        </button>
                       </td>
                     </tr>
 

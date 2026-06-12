@@ -97,10 +97,39 @@ export async function fetchHistoryForExport(
   return all;
 }
 
+export function buildAiAnalysisPayload(
+  analysis: Pick<
+    AnalysisResult,
+    "severity" | "severityLevel" | "recommendation" | "primaryWarning" | "clinicalImpact" | "processedBy"
+  >
+): SavePrescriptionPayload["aiAnalysis"] {
+  return {
+    severity: analysis.severity,
+    severityLevel: analysis.severityLevel,
+    recommendation: analysis.recommendation,
+    primaryWarning: analysis.primaryWarning,
+    clinicalImpact: analysis.clinicalImpact,
+    processedBy: analysis.processedBy,
+  };
+}
+
 export async function savePrescription(payload: SavePrescriptionPayload): Promise<unknown> {
   return fetchJson("/api/history", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export async function deleteHistoryRecords(ids: number[]): Promise<{ deletedCount: number }> {
+  const response = await fetchJson<{
+    status: string;
+    data: { deletedCount: number };
+  }>("/api/history/batch", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+
+  return response.data;
 }

@@ -25,6 +25,14 @@ export function resolveClinicalSeverityTier(analysis: AnalysisLike): ClinicalSev
   }
 
   if (
+    label === "Drug Identification Required" ||
+    label.toLowerCase().includes("identification required") ||
+    label.toLowerCase().includes("unrecognized")
+  ) {
+    return "Moderate";
+  }
+
+  if (
     label === "Potential Interaction" ||
     label === "Single Medication Review" ||
     label.toLowerCase().includes("interaction")
