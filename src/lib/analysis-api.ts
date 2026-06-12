@@ -1,4 +1,5 @@
 import type { AnalysisResult } from "../types/prescription";
+import { analyzeApiResponseSchema } from "./analysis-schemas";
 import { fetchJson, getApiErrorMessage } from "./api-error";
 
 type MedicationInput = {
@@ -7,45 +8,28 @@ type MedicationInput = {
   frequency: string;
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** Validates and normalizes the analyze API payload — never pass raw JSON to UI components. */
 export function normalizeAnalysisResult(raw: unknown): AnalysisResult {
-  if (!isRecord(raw)) {
+  const parsed = analyzeApiResponseSchema.safeParse(raw);
+  if (!parsed.success) {
     throw new Error("Unexpected response from the analysis service.");
   }
 
-  if (raw.status === "error") {
-    throw new Error(getApiErrorMessage(raw, "Drug interaction analysis failed."));
+  const data = parsed.data;
+  if ("status" in data) {
+    throw new Error(getApiErrorMessage(data, "Drug interaction analysis failed."));
   }
 
-  const clinicalImpact = Array.isArray(raw.clinicalImpact)
-    ? raw.clinicalImpact.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    : [];
-
-  const severityLevel = raw.severityLevel === "high" ? "high" : "low";
-  const severity = typeof raw.severity === "string" ? raw.severity.trim() : "";
-  const primaryWarning = typeof raw.primaryWarning === "string" ? raw.primaryWarning.trim() : "";
-  const recommendation = typeof raw.recommendation === "string" ? raw.recommendation.trim() : "";
-  const processedBy =
-    typeof raw.processedBy === "string" ? raw.processedBy.trim() : "Claude API — Narayan Pharmacy DDI Engine";
-
-  if (!severity || !primaryWarning || !recommendation) {
-    throw new Error("The analysis service returned an incomplete clinical report. Please try again.");
-  }
-
+  const result = data;
   return {
-    severity,
-    severityLevel,
-    primaryWarning,
-    recommendation,
-    clinicalImpact:
-      clinicalImpact.length > 0 ? clinicalImpact : ["No additional clinical impact details were provided."],
-    processedBy,
-    cachedResult: raw.cachedResult === true,
-    localResult: false,
+    severity: result.severity,
+    severityLevel: result.severityLevel,
+    primaryWarning: result.primaryWarning,
+    recommendation: result.recommendation,
+    clinicalImpact: result.clinicalImpact,
+    processedBy: result.processedBy,
+    cachedResult: result.cachedResult === true,
+    localResult: result.localResult === true,
   };
 }
 

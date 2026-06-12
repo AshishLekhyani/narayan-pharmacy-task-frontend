@@ -1,41 +1,19 @@
+import { HISTORY_EXPORT_LIMIT } from "./clinical-constants";
 import { fetchJson } from "./api-error";
 import type { AnalysisResult } from "../types/prescription";
+import {
+  parseBatchDeleteResponse,
+  parseHistoryListResponse,
+  parseHistoryStatsResponse,
+  type HistoryFilterMode,
+  type HistoryStats,
+  type PrescriptionHistoryRecord,
+} from "./history-schemas";
 
-export type HistoryFilterMode = "all" | "high" | "flagged" | "safe";
-
-export type MedicationRecord = {
-  id: number;
-  name: string;
-  dosage: string;
-  frequency: string;
-};
-
-export type PrescriptionHistoryRecord = {
-  id: number;
-  patientName: string;
-  prescribedAt: string;
-  medications: MedicationRecord[];
-  analysis: {
-    statusLabel: string | null;
-    severityLevel: string | null;
-    recommendation: string | null;
-    primaryWarning: string | null;
-    clinicalImpact: string[];
-    processedBy: string | null;
-  };
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type HistoryStats = {
-  totalRecords: number;
-  severeAlerts: number;
-  aiFlagged: number;
-  validationRate: number;
-};
+export type { HistoryFilterMode, HistoryStats, PrescriptionHistoryRecord };
 
 export type HistoryListResponse = {
-  status: string;
+  status: "success";
   data: PrescriptionHistoryRecord[];
   meta: {
     page: number;
@@ -45,7 +23,6 @@ export type HistoryListResponse = {
     filter: HistoryFilterMode;
     search: string;
   };
-  stats: HistoryStats;
 };
 
 export type HistoryQueryParams = {
@@ -75,7 +52,13 @@ function buildHistoryUrl(params: HistoryQueryParams) {
 }
 
 export async function fetchHistoryPage(params: HistoryQueryParams): Promise<HistoryListResponse> {
-  return fetchJson<HistoryListResponse>(buildHistoryUrl(params));
+  const raw = await fetchJson<unknown>(buildHistoryUrl(params));
+  return parseHistoryListResponse(raw);
+}
+
+export async function fetchHistoryStats(): Promise<HistoryStats> {
+  const raw = await fetchJson<unknown>("/api/history/stats");
+  return parseHistoryStatsResponse(raw).data;
 }
 
 export async function fetchHistoryForExport(
@@ -92,9 +75,13 @@ export async function fetchHistoryForExport(
     all.push(...result.data);
     totalPages = result.meta.totalPages;
     page += 1;
-  } while (page <= totalPages && all.length < 500);
+  } while (page <= totalPages && all.length < HISTORY_EXPORT_LIMIT);
 
   return all;
+}
+
+export function wasExportTruncated(rowCount: number, totalMatching: number): boolean {
+  return rowCount >= HISTORY_EXPORT_LIMIT && totalMatching > HISTORY_EXPORT_LIMIT;
 }
 
 export function buildAiAnalysisPayload(
@@ -122,14 +109,10 @@ export async function savePrescription(payload: SavePrescriptionPayload): Promis
 }
 
 export async function deleteHistoryRecords(ids: number[]): Promise<{ deletedCount: number }> {
-  const response = await fetchJson<{
-    status: string;
-    data: { deletedCount: number };
-  }>("/api/history/batch", {
+  const raw = await fetchJson<unknown>("/api/history/batch", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),
   });
-
-  return response.data;
+  return parseBatchDeleteResponse(raw).data;
 }

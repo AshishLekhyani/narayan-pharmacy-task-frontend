@@ -16,12 +16,12 @@ export default function Navigation() {
   };
 
   return (
-    <nav className="flex h-16">
-      <Link href="/" className={getLinkClass("/")}>
-        Prescription Entry
+    <nav className="flex h-16 shrink-0">
+      <Link href="/" className={`${getLinkClass("/")} whitespace-nowrap text-body-sm md:text-base px-2 md:px-4`}>
+        Entry
       </Link>
-      <Link href="/history" className={getLinkClass("/history")}>
-        Prescription History
+      <Link href="/history" className={`${getLinkClass("/history")} whitespace-nowrap text-body-sm md:text-base px-2 md:px-4`}>
+        History
       </Link>
     </nav>
   );

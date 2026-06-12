@@ -1,3 +1,4 @@
+import { persistedAnalysisSessionSchema } from "./session-schemas";
 import type { AnalysisResult, Medication } from "../types/prescription";
 
 const STORAGE_KEY = "rx_lastAnalysis";
@@ -16,10 +17,14 @@ export function readPersistedAnalysis(): PersistedAnalysisSession | null {
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PersistedAnalysisSession;
-    if (!parsed?.analysis?.primaryWarning) return null;
-    return parsed;
+    const parsed = persistedAnalysisSessionSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      sessionStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed.data;
   } catch {
+    sessionStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }

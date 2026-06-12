@@ -8,30 +8,8 @@
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
   
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 4px;
-  }
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: #c2c6d4;
-    border-radius: 10px;
-  }
-
   .interaction-row:hover {
     background-color: #f1f3f5;
-  }
-  .expandable-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out;
-  }
-  .row-active .expandable-content {
-    max-height: 500px;
-  }
-  .row-active .expand-icon {
-    transform: rotate(180deg);
   }
 }
 
@@ -51,4 +29,20 @@ body.modal-open main {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+}
+
+@media print {
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+  }
 }

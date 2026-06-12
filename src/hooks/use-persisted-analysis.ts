@@ -62,19 +62,24 @@ export function usePersistedAnalysis() {
   }, []);
 
   const invalidateIfPrescriptionChanged = useCallback(
-    (patientName: string, date: string, drugs: Medication[]) => {
-      if (!sessionSnapshot) return;
+    (patientName: string, date: string, drugs: Medication[]): boolean => {
       const current = buildPrescriptionFingerprint(patientName, date, drugs);
-      const stored = buildPrescriptionFingerprint(
-        sessionSnapshot.patientName,
-        sessionSnapshot.date,
-        sessionSnapshot.drugs
-      );
-      if (current !== stored) {
+      const storedFingerprint = sessionSnapshot
+        ? buildPrescriptionFingerprint(
+            sessionSnapshot.patientName,
+            sessionSnapshot.date,
+            sessionSnapshot.drugs
+          )
+        : null;
+
+      if (storedFingerprint !== null && current !== storedFingerprint) {
         clearPersistedAnalysis();
         sessionSnapshot = null;
         emitChange();
+        return true;
       }
+
+      return false;
     },
     []
   );

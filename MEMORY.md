@@ -127,3 +127,35 @@
 ### [June 12, 2026 - 5:30 PM] Unrecognized Drug Severity Mapping
 - **Clinical Severity**: `clinical-severity.ts` maps backend label `Drug Identification Required` to **Moderate** tier so fictional/unknown drug responses surface clearly in history without pretending to be a verified safe interaction.
 
+### [June 12, 2026 - 6:00 PM] Architecture & Code Quality Refactor
+- **Component Extraction**: `page.tsx` slimmed (~876 → ~560 lines) — `AnalysisResultPanel`, `InlineNotice`, shared `PortalDropdown` for frequency (removed duplicate `FrequencyDropdown`).
+- **Hooks**: `use-analyze-and-save.ts` (analyze + save mutation), `use-scroll-lock.ts` (modal body lock).
+- **Shared Constants**: `frequency-presets.ts` centralizes OD/BD/TDS presets for modal and edit flow.
+- **UX**: Removed duplicate “AI Recommendation” block in results; entry page now uses `clinical-severity.ts` tier styling in `AnalysisResultPanel`.
+- **Validation Parity**: Frontend junk blocklist now includes `null` and `undefined` (matches backend).
+- **Validation Result**: `npm run build` passes.
+
+### [June 12, 2026 - 7:15 PM] Second-Pass Quality & Safety Hardening
+- **Clinical Safety**: Changing patient, date, or drugs now clears both persisted analysis and in-memory mutation results (no stale analysis panel).
+- **Validation**: Zod parsing for analyze API, session draft drugs, and persisted analysis; inline prescription date errors.
+- **Limits**: 50-medication cap enforced in UI; batch delete capped at 100; export truncation notice at 500 rows.
+- **History UX**: Selection cleared on filter/search/page change; mobile nav visible (Entry / History).
+- **A11y**: `InlineNotice` uses `role="alert"` / `aria-live`; print CSS hides chrome and form (`no-print`).
+- **Shared Constants**: `clinical-constants.ts`, `history-filters.ts`, `createMedicationId()` via `crypto.randomUUID`.
+- **Validation Result**: `npm run build` and `npm run lint` pass.
+
+### [June 12, 2026 - 6:45 PM] History Split, Modal Extract & API Schemas
+- **History Page**: Split into `HistoryStatsCards`, `HistoryToolbar`, `HistoryTable`, `HistoryRecordRow`, `HistoryExpandedDetail`, `HistoryPagination`; page ~633 → ~200 lines.
+- **Delete UX**: Replaced `window.confirm` with accessible `ConfirmDialog`.
+- **Medication Modal**: Extracted `MedicationFormModal` from entry page; `page.tsx` further reduced.
+- **Zod API Parsing**: `history-schemas.ts` validates list, stats, and batch-delete responses; added `zod` dependency.
+- **Stats Query**: History stats fetched via `GET /api/history/stats` (cached 60s) instead of bundled on every paginated list request.
+- **CSV**: Moved to `history-csv.ts`.
+- **Validation Result**: `npm run build` passes.
+
+### [June 12, 2026 - 8:15 PM] Modal A11y, Atomic Save & Drug Table Extract (#2, #4, #5)
+- **Modal A11y (#2)**: `use-focus-trap.ts` (Tab cycle, Escape, focus restore); shared `ModalShell` with scroll lock; `ConfirmDialog` and `MedicationFormModal` wired through shell with `aria-label` / `htmlFor` / `role="alert"`; `PortalDropdown` gains listbox keyboard nav (Arrow/Home/End/Enter/Escape) and `aria-haspopup` / `aria-expanded`.
+- **Atomic Save (#4)**: `analyze-and-save-api.ts` + `use-analyze-and-save.ts` call `POST /api/prescriptions/analyze-and-save` instead of separate analyze then save.
+- **Component Extract (#5)**: `DrugListTable` and `PrescriptionActionBar` extracted from `page.tsx` (~420 lines remaining).
+- **Validation Result**: `npm run build` and `npm run lint` pass.
+

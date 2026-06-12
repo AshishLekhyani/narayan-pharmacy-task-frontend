@@ -21,7 +21,7 @@ export default function RootLayout({
           <header className="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface border-b border-outline-variant">
             <div className="flex items-center gap-6">
               <span className="font-headline-md text-headline-md font-bold text-primary">Narayan Pharmacy</span>
-              <div className="hidden md:flex gap-4">
+              <div className="flex gap-2 md:gap-4 text-body-sm md:text-base overflow-x-auto">
                 <Navigation />
               </div>
             </div>

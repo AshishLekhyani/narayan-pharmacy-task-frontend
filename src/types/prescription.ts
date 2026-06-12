@@ -7,7 +7,7 @@ export type Medication = {
 
 export type AnalysisResult = {
   severity: string;
-  severityLevel: string;
+  severityLevel: "high" | "low";
   primaryWarning: string;
   recommendation: string;
   clinicalImpact: string[];

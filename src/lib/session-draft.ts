@@ -1,3 +1,4 @@
+import { draftDrugsSchema } from "./session-schemas";
 import type { Medication } from "../types/prescription";
 
 const KEYS = {
@@ -18,8 +19,15 @@ export function readDraftFromSession(): {
   let drugs: Medication[] = [];
   try {
     const stored = sessionStorage.getItem(KEYS.drugs);
-    drugs = stored ? (JSON.parse(stored) as Medication[]) : [];
+    if (stored) {
+      const parsed = draftDrugsSchema.safeParse(JSON.parse(stored));
+      drugs = parsed.success ? parsed.data : [];
+      if (!parsed.success) {
+        sessionStorage.removeItem(KEYS.drugs);
+      }
+    }
   } catch {
+    sessionStorage.removeItem(KEYS.drugs);
     drugs = [];
   }
 

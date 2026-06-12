@@ -17,6 +17,8 @@ const JUNK_VALUES = new Set([
   "na",
   "n/a",
   "none",
+  "null",
+  "undefined",
 ]);
 
 const PATIENT_NAME_PATTERN = /^[\p{L}\p{M}][\p{L}\p{M}\s'.-]*$/u;
