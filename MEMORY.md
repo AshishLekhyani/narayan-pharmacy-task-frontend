@@ -159,3 +159,11 @@
 - **Component Extract (#5)**: `DrugListTable` and `PrescriptionActionBar` extracted from `page.tsx` (~420 lines remaining).
 - **Validation Result**: `npm run build` and `npm run lint` pass.
 
+### [June 12, 2026 - 9:30 PM] Audit Remediation — Clinical Safety & A11y Fixes
+- **Stale Persist Race**: `onSuccess` uses mutation variables + fingerprint check; ignores results if prescription changed during in-flight request.
+- **Portal Dropdown in Modals**: `stopPropagation` on Escape; listbox focused on open; `data-focus-trap-exempt` + `data-portal-dropdown-open` integrate with focus trap.
+- **Focus Trap**: Stable `onEscape` ref; exempt portaled menus in Tab order; `initialFocusRef` on medication form (first field) and destructive confirm (Cancel).
+- **Stable Callbacks**: `useCallback` for modal close handlers on entry and history pages.
+- **Cleanup**: Removed dead `analysis-api.ts`, `savePrescription()`, and unused `analyzeApiResponseSchema`; updated README/AGENTS.md.
+- **Validation Result**: `npm run build` and `npm run lint` pass.
+

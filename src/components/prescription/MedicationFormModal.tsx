@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlusCircle, Trash2, X } from "lucide-react";
 import PortalDropdown from "../PortalDropdown";
@@ -75,6 +75,7 @@ function buildInitialDrafts(mode: "add" | "edit", editDrug?: Medication): DraftD
 type MedicationFormModalBodyProps = Omit<MedicationFormModalProps, "open"> & {
   titleId: string;
   errorId: string;
+  firstFieldRef: RefObject<HTMLInputElement | null>;
 };
 
 function MedicationFormModalBody({
@@ -85,6 +86,7 @@ function MedicationFormModalBody({
   onSave,
   titleId,
   errorId,
+  firstFieldRef,
 }: MedicationFormModalBodyProps) {
   const [draftDrugs, setDraftDrugs] = useState<DraftDrug[]>(() => buildInitialDrafts(mode, editDrug));
   const [modalError, setModalError] = useState<string | null>(null);
@@ -199,13 +201,13 @@ function MedicationFormModalBody({
                         </label>
                       )}
                       <input
+                        ref={index === 0 ? firstFieldRef : undefined}
                         id={`drug-name-${draft.id}`}
                         className="w-full bg-surface-container-lowest border border-outline text-on-surface px-4 py-3 rounded focus:ring-1 focus:ring-primary focus:border-primary"
                         placeholder="e.g. Lisinopril"
                         type="text"
                         value={draft.name}
                         onChange={(e) => updateDraftDrug(draft.id, "name", e.target.value)}
-                        autoFocus={index === 0}
                       />
                     </div>
                     <div className="flex-1 space-y-1">
@@ -313,12 +315,14 @@ export default function MedicationFormModal({
 }: MedicationFormModalProps) {
   const titleId = useId();
   const errorId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
 
   return (
     <ModalShell
       open={open}
       onClose={onClose}
       ariaLabelledBy={titleId}
+      initialFocusRef={firstFieldRef}
       panelClassName="bg-surface border border-outline-variant shadow-2xl rounded-xl w-full max-w-4xl overflow-hidden max-h-[90vh] flex flex-col"
     >
       {open && (
@@ -331,6 +335,7 @@ export default function MedicationFormModal({
           onSave={onSave}
           titleId={titleId}
           errorId={errorId}
+          firstFieldRef={firstFieldRef}
         />
       )}
     </ModalShell>

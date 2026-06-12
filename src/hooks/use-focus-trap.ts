@@ -1,7 +1,9 @@
-import { useEffect, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const PORTAL_DROPDOWN_OPEN_SELECTOR = "[data-portal-dropdown-open]";
 
 type UseFocusTrapOptions = {
   active: boolean;
@@ -10,12 +12,35 @@ type UseFocusTrapOptions = {
   initialFocusRef?: RefObject<HTMLElement | null>;
 };
 
+function isVisibleFocusable(el: HTMLElement): boolean {
+  return el.offsetParent !== null || el === document.activeElement;
+}
+
+function collectFocusable(container: HTMLElement): HTMLElement[] {
+  const inside = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    isVisibleFocusable
+  );
+
+  const exemptRoots = document.querySelectorAll<HTMLElement>("[data-focus-trap-exempt]");
+  const exempt = Array.from(exemptRoots).flatMap((root) =>
+    Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isVisibleFocusable)
+  );
+
+  return [...inside, ...exempt];
+}
+
 export function useFocusTrap({
   active,
   containerRef,
   onEscape,
   initialFocusRef,
 }: UseFocusTrapOptions) {
+  const onEscapeRef = useRef(onEscape);
+
+  useEffect(() => {
+    onEscapeRef.current = onEscape;
+  }, [onEscape]);
+
   useEffect(() => {
     if (!active || !containerRef.current) return;
 
@@ -31,16 +56,17 @@ export function useFocusTrap({
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (document.querySelector(PORTAL_DROPDOWN_OPEN_SELECTOR)) {
+          return;
+        }
         event.preventDefault();
-        onEscape?.();
+        onEscapeRef.current?.();
         return;
       }
 
       if (event.key !== "Tab") return;
 
-      const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
-        (el) => el.offsetParent !== null || el === document.activeElement
-      );
+      const focusable = collectFocusable(container);
 
       if (focusable.length === 0) {
         event.preventDefault();
@@ -67,5 +93,5 @@ export function useFocusTrap({
       document.removeEventListener("keydown", handleKeyDown);
       previouslyFocused?.focus?.();
     };
-  }, [active, containerRef, initialFocusRef, onEscape]);
+  }, [active, containerRef, initialFocusRef]);
 }

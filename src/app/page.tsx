@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ClipboardList, AlertTriangle, Loader2 } from "lucide-react";
 import AnalysisResultPanel from "../components/prescription/AnalysisResultPanel";
@@ -134,8 +134,10 @@ export default function PrescriptionEntryPage() {
       setSaveNotice({ type: "error", message: prescriptionDateError });
       return;
     }
-    analyzeMutation.mutate(drugs);
+    analyzeMutation.mutate({ patientName, date, drugs });
   };
+
+  const closeMedicationModal = useCallback(() => setIsModalOpen(false), []);
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -293,7 +295,7 @@ export default function PrescriptionEntryPage() {
         mode={modalMode}
         editDrug={editDrug}
         existingDrugCount={drugs.length}
-        onClose={() => setIsModalOpen(false)}
+        onClose={closeMedicationModal}
         onSave={handleMedicationSave}
       />
     </div>

@@ -45,8 +45,8 @@ Custom-built for **Narayan Pharmacy** (regional Indian pharmacy operations). Pre
 #### Clinical Safety Rules
 - **Analysis freshness**: Any add/edit/remove of medications after a successful AI analysis must invalidate (`analyzeMutation.reset()`) before save.
 - **No placeholder analytics**: History stats, filters, CSV export must use live query data.
-- **Minimum interaction check**: Disable analyze when `drugs.length < 2`; also guard in `requestDrugInteractionAnalysis()`.
-- **No raw JSON in UI**: Always normalize analyze responses through `src/lib/analysis-api.ts` before rendering.
+- **Minimum interaction check**: Disable analyze when `drugs.length < 1`; single-drug rules engine runs server-side via analyze-and-save.
+- **No raw JSON in UI**: Always normalize analyze-and-save responses through `src/lib/analyze-and-save-api.ts` (Zod) before rendering.
 - **Graceful analyze failures**: Show inline error + Retry button; never clear form state on analyze error.
 
 #### Hydration Safety (critical)
@@ -69,7 +69,7 @@ Never cause SSR/client text mismatches:
 | `src/app/history/page.tsx` | Live history table, search, filters, CSV export |
 | `src/app/Providers.tsx` | React Query + Lenis (client-only) |
 | `src/components/Navigation.tsx` | Active route highlighting |
-| `src/lib/analysis-api.ts` | Analyze fetch, error handling, response normalization |
+| `src/lib/analyze-and-save-api.ts` | Atomic analyze + save fetch and Zod validation |
 | `src/lib/format-date.ts` | SSR-safe date formatting |
 | `src/hooks/use-session-draft.ts` | `useSyncExternalStore` hook for draft state |
 | `src/lib/session-draft.ts` | Session draft read/write/clear helpers |
@@ -85,8 +85,8 @@ Never cause SSR/client text mismatches:
 
 ### 6. SECURITY RED FLAGS (must never exist)
 - **No hardcoded API keys** — secrets live only in `Backend/.env` (gitignored). Run `npm run verify:secrets` before commit.
-- **No raw Claude JSON in UI** — all analyze responses pass through `normalizeAnalysisResult()`; render only typed clinical fields.
-- **No unhandled API calls** — use `fetchJson()` / `savePrescription()` / `requestPrescriptionAnalysis()`; surface `message` strings inline, never `alert()` or raw response bodies.
+- **No raw Claude JSON in UI** — analyze-and-save responses pass through Zod in `analyze-and-save-api.ts`; render only typed clinical fields.
+- **No unhandled API calls** — use `fetchJson()` / `requestAnalyzeAndSavePrescription()`; surface `message` strings inline, never `alert()` or raw response bodies.
 
 ### 7. VERIFICATION CHECKLIST (run before declaring done)
 - [ ] `npm run lint` passes

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import HistoryStatsCards from "../../components/history/HistoryStatsCards";
@@ -113,6 +113,8 @@ export default function HistoryPage() {
     setSelectedIds((prev) => [...new Set([...prev, ...recordIdsOnPage])]);
   };
 
+  const closeConfirmDelete = useCallback(() => setConfirmDeleteOpen(false), []);
+
   const handleExport = async () => {
     setIsExporting(true);
     setExportError(null);
@@ -219,7 +221,7 @@ export default function HistoryPage() {
         variant="danger"
         isLoading={deleteMutation.isPending}
         onConfirm={() => deleteMutation.mutate(pendingDeleteIds)}
-        onCancel={() => setConfirmDeleteOpen(false)}
+        onCancel={closeConfirmDelete}
       />
     </motion.div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import ModalShell from "./ModalShell";
 
@@ -29,6 +29,7 @@ export default function ConfirmDialog({
 }: ConfirmDialogProps) {
   const titleId = useId();
   const messageId = useId();
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
   return (
     <ModalShell
@@ -38,6 +39,7 @@ export default function ConfirmDialog({
       ariaLabelledBy={titleId}
       ariaDescribedBy={messageId}
       zIndexClass="z-[110]"
+      initialFocusRef={variant === "danger" ? cancelButtonRef : undefined}
     >
       <div className="p-6 flex gap-4">
         {variant === "danger" && (
@@ -56,6 +58,7 @@ export default function ConfirmDialog({
       </div>
       <div className="px-6 py-4 bg-surface-container-highest border-t border-outline-variant flex justify-end gap-3">
         <button
+          ref={cancelButtonRef}
           type="button"
           onClick={onCancel}
           disabled={isLoading}

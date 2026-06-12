@@ -5,10 +5,17 @@ import {
   validatePatientName,
   validatePrescriptionDate,
 } from "../lib/prescription-validation";
+import { buildPrescriptionFingerprint } from "../lib/session-analysis";
 import type { AnalysisResult, Medication } from "../types/prescription";
 
 type PersistAnalysisPayload = {
   analysis: AnalysisResult;
+  patientName: string;
+  date: string;
+  drugs: Medication[];
+};
+
+export type AnalyzeAndSaveVariables = {
   patientName: string;
   date: string;
   drugs: Medication[];
@@ -31,21 +38,25 @@ export function useAnalyzeAndSave({
 }: UseAnalyzeAndSaveArgs) {
   const queryClient = useQueryClient();
 
-  return useMutation<AnalysisResult, Error, Medication[]>({
-    mutationFn: async (currentDrugs) => {
-      const trimmedName = patientName.trim();
+  return useMutation<AnalysisResult, Error, AnalyzeAndSaveVariables>({
+    mutationFn: async ({ patientName: name, date: prescriptionDate, drugs: currentDrugs }) => {
+      const trimmedName = name.trim();
       const nameError = validatePatientName(trimmedName);
       if (nameError) throw new Error(nameError);
 
-      const dateError = validatePrescriptionDate(date);
+      const dateError = validatePrescriptionDate(prescriptionDate);
       if (dateError) throw new Error(dateError);
 
       if (currentDrugs.length === 0) {
         throw new Error("Add at least one medication before running analysis.");
       }
 
-      const medications = currentDrugs.map(({ name, dosage, frequency }) => {
-        const entry = { name: name.trim(), dosage: dosage.trim(), frequency: frequency.trim() };
+      const medications = currentDrugs.map(({ name: drugName, dosage, frequency }) => {
+        const entry = {
+          name: drugName.trim(),
+          dosage: dosage.trim(),
+          frequency: frequency.trim(),
+        };
         const medicationError = validateMedicationEntry(entry);
         if (medicationError) throw new Error(medicationError);
         return entry;
@@ -53,17 +64,29 @@ export function useAnalyzeAndSave({
 
       return requestAnalyzeAndSavePrescription({
         patientName: trimmedName,
-        date,
+        date: prescriptionDate,
         medications,
       });
     },
-    onSuccess: (analysis) => {
+    onSuccess: (analysis, variables) => {
+      const requestFingerprint = buildPrescriptionFingerprint(
+        variables.patientName,
+        variables.date,
+        variables.drugs
+      );
+      const currentFingerprint = buildPrescriptionFingerprint(patientName, date, drugs);
+
+      if (requestFingerprint !== currentFingerprint) {
+        return;
+      }
+
       persist({
         analysis,
-        patientName: patientName.trim(),
-        date,
-        drugs: [...drugs],
+        patientName: variables.patientName.trim(),
+        date: variables.date,
+        drugs: variables.drugs.map((drug) => ({ ...drug })),
       });
+
       const cacheNote = analysis.cachedResult ? " Analysis served from cache — no new AI charge." : "";
       onNotice({
         type: "success",

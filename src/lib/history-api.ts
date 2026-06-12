@@ -1,6 +1,5 @@
 import { HISTORY_EXPORT_LIMIT } from "./clinical-constants";
 import { fetchJson } from "./api-error";
-import type { AnalysisResult } from "../types/prescription";
 import {
   parseBatchDeleteResponse,
   parseHistoryListResponse,
@@ -30,16 +29,6 @@ export type HistoryQueryParams = {
   limit?: number;
   search?: string;
   filter?: HistoryFilterMode;
-};
-
-export type SavePrescriptionPayload = {
-  patientName: string;
-  date: string;
-  medications: Array<{ name: string; dosage: string; frequency: string }>;
-  aiAnalysis: Pick<
-    AnalysisResult,
-    "severity" | "severityLevel" | "recommendation" | "primaryWarning" | "clinicalImpact" | "processedBy"
-  > | null;
 };
 
 function buildHistoryUrl(params: HistoryQueryParams) {
@@ -82,30 +71,6 @@ export async function fetchHistoryForExport(
 
 export function wasExportTruncated(rowCount: number, totalMatching: number): boolean {
   return rowCount >= HISTORY_EXPORT_LIMIT && totalMatching > HISTORY_EXPORT_LIMIT;
-}
-
-export function buildAiAnalysisPayload(
-  analysis: Pick<
-    AnalysisResult,
-    "severity" | "severityLevel" | "recommendation" | "primaryWarning" | "clinicalImpact" | "processedBy"
-  >
-): SavePrescriptionPayload["aiAnalysis"] {
-  return {
-    severity: analysis.severity,
-    severityLevel: analysis.severityLevel,
-    recommendation: analysis.recommendation,
-    primaryWarning: analysis.primaryWarning,
-    clinicalImpact: analysis.clinicalImpact,
-    processedBy: analysis.processedBy,
-  };
-}
-
-export async function savePrescription(payload: SavePrescriptionPayload): Promise<unknown> {
-  return fetchJson("/api/history", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
 }
 
 export async function deleteHistoryRecords(ids: number[]): Promise<{ deletedCount: number }> {

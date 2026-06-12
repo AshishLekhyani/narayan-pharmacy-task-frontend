@@ -87,8 +87,8 @@ src/
 │   ├── use-session-draft.ts
 │   └── use-debounced-value.ts
 ├── lib/
-│   ├── analysis-api.ts    # Analyze + single-drug local result
-│   ├── history-api.ts     # History fetch/save/export
+│   ├── analyze-and-save-api.ts  # Atomic analyze + save
+│   ├── history-api.ts     # History fetch/export/delete
 │   ├── api-error.ts       # fetchJson + error messages
 │   ├── clinical-severity.ts
 │   ├── format-date.ts
@@ -103,9 +103,9 @@ All server communication uses relative `/api` paths:
 
 | Client helper | Backend route | Purpose |
 |---------------|---------------|---------|
-| `requestPrescriptionAnalysis()` | `POST /api/analyze` | 2+ drug interaction check |
-| `savePrescription()` | `POST /api/history` | Save prescription + AI result |
+| `requestAnalyzeAndSavePrescription()` | `POST /api/prescriptions/analyze-and-save` | Analyze + save in one step |
 | `fetchHistoryPage()` | `GET /api/history` | Paginated list with search/filter |
+| `deleteHistoryRecords()` | `DELETE /api/history/batch` | Batch delete selected records |
 
 Responses are normalized before render — raw JSON from Claude is never shown in the UI.
 

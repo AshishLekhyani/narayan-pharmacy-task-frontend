@@ -10,8 +10,3 @@ export const analysisResultSchema = z.object({
   cachedResult: z.boolean().optional(),
   localResult: z.boolean().optional(),
 });
-
-export const analyzeApiResponseSchema = z.union([
-  z.object({ status: z.literal("error"), message: z.string() }),
-  analysisResultSchema.extend({ cachedResult: z.boolean().optional() }),
-]);

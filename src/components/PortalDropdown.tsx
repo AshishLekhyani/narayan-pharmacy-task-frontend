@@ -113,7 +113,19 @@ export default function PortalDropdown<T extends string>({
     };
   }, [isOpen, updateDropdownPosition]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const frame = requestAnimationFrame(() => dropdownRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen]);
+
   const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (isOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      event.stopPropagation();
+      dropdownRef.current?.focus();
+      return;
+    }
     if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       if (!isOpen) openMenu();
@@ -121,6 +133,7 @@ export default function PortalDropdown<T extends string>({
     }
     if (event.key === "Escape" && isOpen) {
       event.preventDefault();
+      event.stopPropagation();
       closeMenu();
     }
   };
@@ -128,6 +141,7 @@ export default function PortalDropdown<T extends string>({
   const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       closeMenu();
       return;
     }
@@ -168,6 +182,9 @@ export default function PortalDropdown<T extends string>({
                 role="listbox"
                 tabIndex={-1}
                 data-lenis-prevent
+                data-focus-trap-exempt
+                data-portal-dropdown-open
+                aria-activedescendant={`${listboxId}-option-${highlightIndex}`}
                 onKeyDown={handleMenuKeyDown}
                 initial={{ opacity: 0, y: -5, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}

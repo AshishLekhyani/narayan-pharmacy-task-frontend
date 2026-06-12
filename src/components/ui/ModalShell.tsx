@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useFocusTrap } from "../../hooks/use-focus-trap";
 import { useScrollLock } from "../../hooks/use-scroll-lock";
@@ -13,6 +13,7 @@ type ModalShellProps = {
   role?: "dialog" | "alertdialog";
   zIndexClass?: string;
   panelClassName?: string;
+  initialFocusRef?: RefObject<HTMLElement | null>;
   children: ReactNode;
 };
 
@@ -24,6 +25,7 @@ export default function ModalShell({
   role = "dialog",
   zIndexClass = "z-[100]",
   panelClassName = "bg-surface border border-outline-variant shadow-2xl rounded-xl w-full max-w-md overflow-hidden",
+  initialFocusRef,
   children,
 }: ModalShellProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -33,6 +35,7 @@ export default function ModalShell({
     active: open,
     containerRef: panelRef,
     onEscape: onClose,
+    initialFocusRef,
   });
 
   return (
