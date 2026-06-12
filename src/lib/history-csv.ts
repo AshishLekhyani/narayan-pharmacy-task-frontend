@@ -1,4 +1,5 @@
 import { resolveClinicalSeverityTier } from "./clinical-severity";
+import { toPrescriptionDateIso } from "./format-date";
 import type { PrescriptionHistoryRecord } from "./history-schemas";
 
 export function downloadHistoryCsv(records: PrescriptionHistoryRecord[]) {
@@ -19,7 +20,7 @@ export function downloadHistoryCsv(records: PrescriptionHistoryRecord[]) {
     ...records.map((record) => [
       record.id,
       record.patientName,
-      new Date(record.prescribedAt).toISOString(),
+      toPrescriptionDateIso(record.prescribedAt),
       record.medications.length,
       record.medications.map((m) => `${m.name} (${m.dosage}, ${m.frequency})`).join(" | "),
       record.analysis.statusLabel ?? "",
